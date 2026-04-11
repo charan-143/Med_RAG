@@ -24,11 +24,45 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedImage = null;
 
     // --- PDF Upload Logic ---
+    const handlePdfSelection = (file) => {
+        if (!file) return;
+        selectedPdf = file;
+        uploadText.textContent = selectedPdf.name;
+        uploadBtn.disabled = false;
+    };
+
     pdfInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
-            selectedPdf = e.target.files[0];
-            uploadText.textContent = selectedPdf.name;
-            uploadBtn.disabled = false;
+            handlePdfSelection(e.target.files[0]);
+        }
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        pdfDropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        pdfDropZone.addEventListener(eventName, () => {
+            pdfDropZone.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        pdfDropZone.addEventListener(eventName, () => {
+            pdfDropZone.classList.remove('dragover');
+        }, false);
+    });
+
+    pdfDropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            pdfInput.files = files;
+            handlePdfSelection(files[0]);
+            // Instruct standard click behavior!
+            uploadBtn.click();
         }
     });
 
@@ -87,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedImage = null;
         imageInput.value = '';
         imagePreviewContainer.classList.add('hidden');
-        imagePreview.src = '';
+        imagePreview.removeAttribute('src');
         checkChatSubmitStatus();
     });
 
@@ -112,21 +146,38 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = !(messageInput.value.trim() !== '' || selectedImage !== null);
     }
 
-    function appendMessage(role, contentHTML, imgSrc = null) {
+    function appendMessage(role, content, isHtml = false, imgSrc = null) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${role}`;
         
-        let icon = role === 'assistant' ? '<i class="fa-solid fa-stethoscope"></i>' : '<i class="fa-solid fa-user"></i>';
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = 'avatar';
+        // Icons are strictly hardcoded static strings, safe for innerHTML
+        avatarDiv.innerHTML = role === 'assistant' ? '<i class="fa-solid fa-stethoscope"></i>' : '<i class="fa-solid fa-user"></i>';
         
-        let imgHtml = imgSrc ? `<img src="${imgSrc}" class="msg-img-preview">` : '';
-
-        msgDiv.innerHTML = `
-            <div class="avatar">${icon}</div>
-            <div class="msg-content">
-                ${imgHtml}
-                ${contentHTML}
-            </div>
-        `;
+        const msgContentDiv = document.createElement('div');
+        msgContentDiv.className = 'msg-content';
+        
+        if (imgSrc) {
+            const imgEl = document.createElement('img');
+            imgEl.src = imgSrc;
+            imgEl.className = 'msg-img-preview';
+            msgContentDiv.appendChild(imgEl);
+        }
+        
+        if (isHtml) {
+            // Sanitize via DOMPurify before parsing Markdown -> HTML to prevent AI/RAG XSS
+            msgContentDiv.innerHTML = DOMPurify.sanitize(content);
+        } else {
+            // User payloads use textContent to strictly block payload execution!
+            const textEl = document.createElement('p');
+            textEl.textContent = content;
+            msgContentDiv.appendChild(textEl);
+        }
+        
+        msgDiv.appendChild(avatarDiv);
+        msgDiv.appendChild(msgContentDiv);
+        
         chatMessages.appendChild(msgDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         return msgDiv;
@@ -167,8 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         checkChatSubmitStatus();
 
-        // Append user message
-        appendMessage('user', textMessage ? `<p>${textMessage}</p>` : '<p><i>[Image Attachment]</i></p>', msgImage ? msgImageSrc : null);
+        // Append user message securely!
+        const userText = textMessage || '[Image Attachment]';
+        appendMessage('user', userText, false, msgImage ? msgImageSrc : null);
 
         // Append loader
         const loader = showTypingIndicator();
@@ -190,15 +242,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (res.ok) {
                 const data = await res.json();
-                // Parse markdown!
+                // Parse markdown securely!
                 const parsedHtml = marked.parse(data.response);
-                appendMessage('assistant', parsedHtml);
+                appendMessage('assistant', parsedHtml, true);
             } else {
-                appendMessage('assistant', '<p class="error">Sorry, the diagnostic server encountered an error parsing this query.</p>');
+                appendMessage('assistant', 'Sorry, the diagnostic server encountered an error parsing this query.', false);
             }
         } catch (error) {
             loader.remove();
-            appendMessage('assistant', '<p class="error">Network error. Please ensure the backend is running.</p>');
+            appendMessage('assistant', 'Network error. Please ensure the backend is running.', false);
         }
     });
 });

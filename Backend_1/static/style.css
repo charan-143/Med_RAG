@@ -309,7 +309,8 @@ body {
     border-radius: 16px;
     font-size: 15px;
     line-height: 1.6;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
 }
 
 .assistant .msg-content {

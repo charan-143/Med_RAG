@@ -21,16 +21,23 @@ async def chat_endpoint(
     images_to_process = []
     
     if image and image.filename:
+        filename_lower = image.filename.lower()
+        if not filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            raise HTTPException(status_code=400, detail="Unsupported image file type. Please upload a .png, .jpg, .jpeg, or .webp file.")
+
         UPLOAD_DIR = "data/uploads"
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         
-        filepath = os.path.join(UPLOAD_DIR, image.filename)
+        import uuid
+        ext = os.path.splitext(filename_lower)[1]
+        safe_filename = f"{uuid.uuid4().hex}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, safe_filename)
+        
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
             
-        if image.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            images_to_process.append(prepare_image(filepath))
-            
+        images_to_process.append(prepare_image(filepath))
+
     try:
         # Run the routing team agent
         if images_to_process:
@@ -45,4 +52,6 @@ async def chat_endpoint(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logging.getLogger(__name__).exception("An unhandled error occurred during chat_endpoint execution:")
+        raise HTTPException(status_code=500, detail="Internal server error")
