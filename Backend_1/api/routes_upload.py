@@ -14,30 +14,40 @@ async def upload_document(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")
     
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    filename_lower = file.filename.lower()
+    if filename_lower.endswith('.pdf'):
+        file_type = 'pdf'
+    elif filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        file_type = 'image'
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a PDF or an image (.png, .jpg, .jpeg, .webp).")
+    
+    import uuid
+    ext = os.path.splitext(filename_lower)[1]
+    safe_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # If the file is a PDF, trigger vector store load
-    if file.filename.lower().endswith('.pdf'):
-        load_documents_to_db(file_path)
+    import asyncio
+    import logging
+
+    if file_type == 'pdf':
+        try:
+            await asyncio.to_thread(load_documents_to_db, file_path)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to parse and vectorize PDF:")
+            raise HTTPException(status_code=500, detail="Internal server error during document processing.")
+            
         return UploadResponse(
             message=f"PDF {file.filename} uploaded and vectorized successfully.",
-            filename=file.filename,
+            filename=safe_filename,
             status="success"
         )
-    
-    # If it is an image
-    elif file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+    elif file_type == 'image':
         return UploadResponse(
             message=f"Image {file.filename} uploaded successfully. You can now refer to it in your chat.", 
-            filename=file.filename,
+            filename=safe_filename,
             status="success"
         )
-
-    return UploadResponse(
-        message=f"File {file.filename} uploaded successfully.",
-        filename=file.filename,
-        status="success"
-    )

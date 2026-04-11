@@ -8,3 +8,18 @@ wheels/
 
 # Virtual environments
 .venv
+.env.example
+.env
+.env.local
+.env.dev
+.env.prod
+.env.test
+.env.prod.local
+.env.dev.local
+.env.test.local
+.env.prod.dev
+.env.prod.test
+.env.dev.test
+.env.prod.dev.local
+.env.prod.test.local
+.env.dev.test.local

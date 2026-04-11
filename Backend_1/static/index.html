@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Marked.js for Markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- DOMPurify for XSS Protection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -39,7 +41,7 @@
                     <button type="button" id="uploadBtn" class="btn primary-btn" disabled>
                         <i class="fa-solid fa-upload"></i> Process Document
                     </button>
-                    <div id="uploadStatus" class="status-msg"></div>
+                    <div id="uploadStatus" class="status-msg" role="status" aria-live="polite" aria-atomic="true"></div>
                 </form>
             </div>
             
@@ -72,21 +74,21 @@
             <div class="chat-input-area">
                 <!-- Image preview container -->
                 <div id="imagePreviewContainer" class="image-preview-container hidden">
-                    <img id="imagePreview" src="" alt="Selected image">
+                    <img id="imagePreview" alt="Selected image">
                     <button type="button" id="removeImageBtn" class="remove-img-btn"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 
                 <form id="chatForm" class="chat-form">
-                    <label class="icon-btn" for="imageInput" title="Attach X-Ray or Image">
+                    <label class="icon-btn" for="imageInput" title="Attach X-Ray or Image" aria-label="Attach file">
                         <i class="fa-solid fa-image"></i>
                         <input type="file" id="imageInput" accept="image/jpeg, image/png, image/webp" hidden>
                     </label>
                     
                     <div class="input-wrapper">
-                        <textarea id="messageInput" placeholder="Ask a diagnostic question or describe symptoms..." rows="1"></textarea>
+                        <textarea id="messageInput" placeholder="Ask a diagnostic question or describe symptoms..." rows="1" aria-label="Ask a diagnostic question or describe symptoms"></textarea>
                     </div>
                     
-                    <button type="submit" id="sendBtn" class="icon-btn send-btn" disabled>
+                    <button type="submit" id="sendBtn" class="icon-btn send-btn" disabled aria-label="Send message">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </form>
