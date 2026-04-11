@@ -38,7 +38,7 @@ async def upload_document(file: UploadFile = File(...)):
             await asyncio.to_thread(load_documents_to_db, file_path)
         except Exception as e:
             logging.getLogger(__name__).exception("Failed to parse and vectorize PDF:")
-            raise HTTPException(status_code=500, detail="Internal server error during document processing.")
+            raise HTTPException(status_code=500, detail="Internal server error during document processing.") from e
             
         return UploadResponse(
             message=f"PDF {file.filename} uploaded and vectorized successfully.",
