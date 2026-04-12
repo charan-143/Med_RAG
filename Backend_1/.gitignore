@@ -23,3 +23,5 @@ wheels/
 .env.prod.dev.local
 .env.prod.test.local
 .env.dev.test.local
+
+ui_images
