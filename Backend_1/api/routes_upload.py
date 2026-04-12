@@ -1,10 +1,17 @@
 import os
 import shutil
+import threading
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from services.document_parser import load_documents_to_db
 from models.api_models import UploadResponse
 
 router = APIRouter()
+
+pdf_db_lock = threading.Lock()
+
+def safe_load_documents_to_db(path):
+    with pdf_db_lock:
+        load_documents_to_db(path)
 
 UPLOAD_DIR = "data/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -35,10 +42,10 @@ async def upload_document(file: UploadFile = File(...)):
 
     if file_type == 'pdf':
         try:
-            await asyncio.to_thread(load_documents_to_db, file_path)
+            await asyncio.to_thread(safe_load_documents_to_db, file_path)
         except Exception as e:
             logging.getLogger(__name__).exception("Failed to parse and vectorize PDF:")
-            raise HTTPException(status_code=500, detail="Internal server error during document processing.")
+            raise HTTPException(status_code=500, detail="Internal server error during document processing.") from e
             
         return UploadResponse(
             message=f"PDF {file.filename} uploaded and vectorized successfully.",

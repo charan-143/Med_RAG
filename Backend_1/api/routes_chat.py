@@ -54,4 +54,4 @@ async def chat_endpoint(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("An unhandled error occurred during chat_endpoint execution:")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

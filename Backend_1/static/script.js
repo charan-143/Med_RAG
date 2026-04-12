@@ -158,13 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const msgContentDiv = document.createElement('div');
         msgContentDiv.className = 'msg-content';
         
-        if (imgSrc) {
-            const imgEl = document.createElement('img');
-            imgEl.src = imgSrc;
-            imgEl.className = 'msg-img-preview';
-            msgContentDiv.appendChild(imgEl);
-        }
-        
         if (isHtml) {
             // Sanitize via DOMPurify before parsing Markdown -> HTML to prevent AI/RAG XSS
             msgContentDiv.innerHTML = DOMPurify.sanitize(content);
@@ -173,6 +166,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const textEl = document.createElement('p');
             textEl.textContent = content;
             msgContentDiv.appendChild(textEl);
+        }
+
+        if (imgSrc) {
+            const imgEl = document.createElement('img');
+            imgEl.src = imgSrc;
+            imgEl.className = 'msg-img-preview';
+            msgContentDiv.insertBefore(imgEl, msgContentDiv.firstChild);
         }
         
         msgDiv.appendChild(avatarDiv);
