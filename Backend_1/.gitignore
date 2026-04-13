@@ -25,3 +25,20 @@ wheels/
 .env.dev.test.local
 
 ui_images
+
+# Runtime data directory (never commit)
+data/clinical_atelier.db
+data/clinical_atelier.db-shm
+data/clinical_atelier.db-wal
+data/uploads/*
+data/vector_store/*
+data/process_cache/*
+!data/**/.gitkeep
+
+# Flutter build output & generated files
+med_rag_flutter/.dart_tool/
+med_rag_flutter/.flutter-plugins
+med_rag_flutter/.flutter-plugins-dependencies
+med_rag_flutter/build/
+med_rag_flutter/windows/flutter/ephemeral/
+med_rag_flutter/web/flutter_service_worker.js
