@@ -26,13 +26,14 @@ wheels/
 
 ui_images
 
-# SQLite runtime database
+# Runtime data directory (never commit)
 data/clinical_atelier.db
 data/clinical_atelier.db-shm
 data/clinical_atelier.db-wal
-
-# Uploaded patient files (runtime data, not source)
-data/uploads/
+data/uploads/*
+data/vector_store/*
+data/process_cache/*
+!data/**/.gitkeep
 
 # Flutter build output & generated files
 med_rag_flutter/.dart_tool/
