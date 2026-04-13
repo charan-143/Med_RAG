@@ -1,6 +1,9 @@
 from agno.agent import Agent
+from agno.team import Team
+from agno.models.google import Gemini
 from agents.base_agent import create_base_medical_agent
 from db.vector_store import pdf_knowledge_base
+from core.config import settings
 
 # --- 1. The Clinical Analyst ---
 # Responsible entirely for heavy text RAG (Vector Lookups)
@@ -26,10 +29,11 @@ radiologist = create_base_medical_agent(
 )
 
 # --- 3. Supervisor Orchestrator ---
-# This is our Routing Team Controller handling top-level requests!
-medical_team_agent = Agent(
+# agno v2.x uses agno.team.Team for multi-agent orchestration, not Agent(team=[...])
+medical_team_agent = Team(
     name="Medical Supervisor System",
-    team=[clinical_analyst, radiologist],
+    members=[clinical_analyst, radiologist],
+    model=Gemini(id="gemini-2.0-flash", api_key=settings.GOOGLE_API_KEY),
     instructions=[
         "You are the orchestrating supervisor for a world-class diagnostic clinic team.",
         "If the user uploaded an image, heavily delegate the visual inquiry to the Radiologist Expert.",
