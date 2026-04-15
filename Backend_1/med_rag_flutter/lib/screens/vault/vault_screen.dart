@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../core/theme.dart';
 import '../../core/api_service.dart';
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
   @override
@@ -13,12 +14,13 @@ class _VaultScreenState extends State<VaultScreen> {
   List<dynamic> _folders = [];
   List<dynamic> _files = [];
   String? _selectedFolderId;
+  String? _selectedFolderName;
   bool _loading = true;
   String _search = '';
-  bool _gridView = true;
-  // AI summary panel
-  Map<String, dynamic>? _summaryFile;
-  bool _summaryVisible = false;
+  final Set<String> _selectedIds = {};
+  
+  Map<String, dynamic>? _previewItem;
+  bool _previewIsFolder = false;
 
   @override
   void initState() {
@@ -31,7 +33,11 @@ class _VaultScreenState extends State<VaultScreen> {
     try {
       final folders = await ApiService.getFolders();
       final files = await ApiService.getFiles(folderId: _selectedFolderId);
-      if (mounted) setState(() { _folders = folders; _files = files; _loading = false; });
+      if (mounted) setState(() {
+        _folders = folders;
+        _files = files;
+        _loading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -43,8 +49,7 @@ class _VaultScreenState extends State<VaultScreen> {
     for (final file in result.files) {
       if (file.bytes == null) continue;
       await ApiService.uploadFile(
-        file.bytes!,
-        file.name,
+        file.bytes!, file.name,
         folderId: _selectedFolderId,
         mimeType: _guessMime(file.extension ?? ''),
       );
@@ -53,147 +58,118 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   String _guessMime(String ext) {
-    const map = {'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg', 'webp': 'image/webp'};
+    const map = {
+      'pdf': 'application/pdf', 'png': 'image/png',
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp',
+    };
     return map[ext.toLowerCase()] ?? 'application/octet-stream';
   }
 
-  List _filteredFiles() => _files.where((f) {
-    if (_search.isEmpty) return true;
-    final name = (f['ai_name'] ?? f['original_name'] ?? '').toString().toLowerCase();
-    return name.contains(_search.toLowerCase());
-  }).toList();
+  void _toggleSelect(String id) => setState(() {
+    if (_selectedIds.contains(id)) _selectedIds.remove(id);
+    else _selectedIds.add(id);
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(40, 40, _summaryVisible ? 430 : 40, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('PERSONAL ARCHIVES',
-                            style: AppTextStyles.label(10, AppColors.primary)
-                                .copyWith(letterSpacing: 2, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text('Clinical Vault',
-                            style: AppTextStyles.headline(32, FontWeight.w700)),
-                      ],
-                    ),
-                    const Spacer(),
-                    // Search
-                    Container(
-                      width: 260,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search, size: 18, color: AppColors.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              decoration: const InputDecoration.collapsed(hintText: 'Search documents...'),
-                              style: AppTextStyles.body(13),
-                              onChanged: (v) => setState(() => _search = v),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _upload,
-                      icon: const Icon(Icons.upload_file_outlined, size: 18),
-                      label: const Text('Upload Record'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 36),
-
-                // Folders
-                _FolderSection(
-                  folders: _folders,
-                  selected: _selectedFolderId,
-                  onSelect: (id) { setState(() { _selectedFolderId = id; }); _load(); },
-                  onNewFolder: _newFolder,
-                ),
-                const SizedBox(height: 36),
-
-                // Files
-                Row(
-                  children: [
-                    Text('RECENT ADDITIONS',
-                        style: AppTextStyles.label(10, AppColors.onSurfaceVariant)
-                            .copyWith(letterSpacing: 1.5, fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(Icons.grid_view_outlined,
-                          color: _gridView ? AppColors.primary : AppColors.onSurfaceVariant),
-                      onPressed: () => setState(() => _gridView = true),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.list_outlined,
-                          color: !_gridView ? AppColors.primary : AppColors.onSurfaceVariant),
-                      onPressed: () => setState(() => _gridView = false),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                if (_loading)
-                  const Center(child: CircularProgressIndicator())
-                else if (_filteredFiles().isEmpty)
-                  _EmptyVault(onUpload: _upload)
-                else
-                  _gridView
-                      ? _FileGrid(
-                          files: _filteredFiles(),
-                          onDelete: _deleteFile,
-                          onDetails: (f) => setState(() {
-                            _summaryFile = f; _summaryVisible = true;
-                          }),
-                        )
-                      : _FileList(
-                          files: _filteredFiles(),
-                          onDelete: _deleteFile,
-                          onDetails: (f) => setState(() {
-                            _summaryFile = f; _summaryVisible = true;
-                          }),
-                        ),
-              ],
-            ),
-          ),
-
-          // AI Summary Panel
-          if (_summaryVisible && _summaryFile != null)
-            Positioned(
-              right: 0, top: 0, bottom: 0,
-              child: _AiSummaryPanel(
-                file: _summaryFile!,
-                onClose: () => setState(() => _summaryVisible = false),
-              ),
-            ),
-        ],
-      ),
-    );
+  List<Map<String, dynamic>> _filteredFolders() {
+    if (_selectedFolderId != null) return [];
+    return _folders
+        .where((f) => _search.isEmpty ||
+            (f['name'] ?? '').toString().toLowerCase().contains(_search.toLowerCase()))
+        .map((f) => Map<String, dynamic>.from(f as Map))
+        .toList();
   }
+
+  List<Map<String, dynamic>> _filteredFiles() => _files
+      .where((f) => _search.isEmpty ||
+          (f['ai_name'] ?? f['original_name'] ?? '').toString().toLowerCase()
+              .contains(_search.toLowerCase()))
+      .map((f) => Map<String, dynamic>.from(f as Map))
+      .toList();
 
   Future<void> _deleteFile(String id) async {
     await ApiService.deleteFile(id);
+    setState(() => _selectedIds.remove(id));
     _load();
+  }
+
+  Future<void> _deleteSelected() async {
+    final toDelete = _selectedIds
+        .where((id) => _files.any((f) => f['id'] == id))
+        .toList();
+    for (final id in toDelete) await ApiService.deleteFile(id);
+    setState(() => _selectedIds.clear());
+    _load();
+  }
+
+  Future<void> _deleteFolder(String id) async {
+    await ApiService.deleteFolder(id);
+    if (_selectedFolderId == id) {
+      if (mounted) setState(() {
+        _selectedFolderId = null;
+        _selectedFolderName = null;
+      });
+    }
+    setState(() => _selectedIds.remove(id));
+    _load();
+  }
+
+  Future<void> _renameFolder(String id, String currentName) async {
+    final ctrl = TextEditingController(text: currentName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Rename Folder', style: AppTextStyles.headline(18, FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(hintText: 'Folder name'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (name != null && name.isNotEmpty && name != currentName) {
+      try { await ApiService.updateFolder(id, name: name); } catch (_) {}
+      if (_selectedFolderId == id) {
+        if (mounted) setState(() => _selectedFolderName = name);
+      }
+      _load();
+    }
+  }
+
+  Future<void> _summarizeFolder(String folderId) async {
+    setState(() => _loading = true);
+    try {
+      final updated = await ApiService.summarizeFolder(folderId);
+      setState(() {
+        _previewItem = updated;
+        _previewIsFolder = true;
+      });
+      _load();
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _summarizeFile(String fileId) async {
+    setState(() => _loading = true);
+    try {
+      final updated = await ApiService.summarizeFile(fileId);
+      setState(() {
+        _previewItem = updated;
+        _previewIsFolder = false;
+      });
+      _load();
+    } catch (_) {
+      setState(() => _loading = false);
+    }
   }
 
   Future<void> _newFolder() async {
@@ -202,7 +178,7 @@ class _VaultScreenState extends State<VaultScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLowest,
-        shape: AppRadius.asymmetric,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text('New Folder', style: AppTextStyles.headline(18, FontWeight.w700)),
         content: TextField(
           controller: ctrl,
@@ -219,523 +195,1090 @@ class _VaultScreenState extends State<VaultScreen> {
       ),
     );
     if (name != null && name.isNotEmpty) {
-      await ApiService.createFolder(name);
+      try { await ApiService.createFolder(name); } catch (_) {}
       _load();
     }
-  }
-}
-
-// ─── Folder Section ────────────────────────────────────────────────────────────
-class _FolderSection extends StatelessWidget {
-  final List folders;
-  final String? selected;
-  final ValueChanged<String?> onSelect;
-  final VoidCallback onNewFolder;
-  const _FolderSection({required this.folders, required this.selected,
-      required this.onSelect, required this.onNewFolder});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Text('CATEGORIZED REPOSITORIES',
-              style: AppTextStyles.label(10, AppColors.onSurfaceVariant)
-                  .copyWith(letterSpacing: 1.5, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppColors.outlineVariant),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            onPressed: onNewFolder,
-            icon: const Icon(Icons.create_new_folder_outlined, size: 16),
-            label: Text('New Folder', style: AppTextStyles.body(12, FontWeight.w600)),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-      if (folders.isEmpty)
-        Text('No folders yet', style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurfaceVariant))
-      else
-        Wrap(
-          spacing: 16, runSpacing: 16,
-          children: [
-            _FolderChip(
-              name: 'All',
-              icon: Icons.folder_outlined,
-              count: null,
-              isSelected: selected == null,
-              onTap: () => onSelect(null),
-            ),
-            ...folders.map((f) => _FolderChip(
-              name: f['name'],
-              icon: _folderIcon(f['icon'] ?? 'folder'),
-              count: f['file_count'] as int?,
-              isSelected: selected == f['id'],
-              onTap: () => onSelect(f['id']),
-            )),
-          ],
-        ),
-    ],
-  );
-
-  IconData _folderIcon(String name) {
-    switch (name) {
-      case 'prescriptions': return Icons.medication_outlined;
-      case 'radiology':     return Icons.medical_information_outlined;
-      case 'biotech':       return Icons.biotech_outlined;
-      case 'photo_camera':  return Icons.photo_camera_outlined;
-      default:              return Icons.folder_outlined;
-    }
-  }
-}
-
-class _FolderChip extends StatelessWidget {
-  final String name;
-  final IconData icon;
-  final int? count;
-  final bool isSelected;
-  final VoidCallback onTap;
-  const _FolderChip({required this.name, required this.icon, required this.count,
-      required this.isSelected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.surfaceContainerLowest : AppColors.surfaceContainerLow,
-        borderRadius: AppRadius.asymmetricBR,
-        boxShadow: isSelected
-            ? [BoxShadow(color: AppColors.primary.withOpacity(0.08), blurRadius: 12)]
-            : [],
-        border: isSelected ? Border.all(color: AppColors.primary.withOpacity(0.15)) : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20,
-              color: isSelected ? AppColors.primaryContainer : AppColors.onSurfaceVariant),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: AppTextStyles.headline(14,
-                  FontWeight.w600,
-                  isSelected ? AppColors.primaryContainer : AppColors.onSurface)),
-              if (count != null)
-                Text('$count files',
-                    style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-// ─── File Grid ─────────────────────────────────────────────────────────────────
-class _FileGrid extends StatelessWidget {
-  final List files;
-  final ValueChanged<String> onDelete;
-  final ValueChanged<Map<String, dynamic>> onDetails;
-  const _FileGrid({required this.files, required this.onDelete, required this.onDetails});
-
-  @override
-  Widget build(BuildContext context) => GridView.builder(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 2, crossAxisSpacing: 24, mainAxisSpacing: 24,
-      childAspectRatio: 1.55,
-    ),
-    itemCount: files.length,
-    itemBuilder: (_, i) => FileCard(
-      file: files[i] as Map<String, dynamic>,
-      onDelete: () => onDelete(files[i]['id']),
-      onDetails: () => onDetails(files[i] as Map<String, dynamic>),
-    ),
-  );
-}
-
-class _FileList extends StatelessWidget {
-  final List files;
-  final ValueChanged<String> onDelete;
-  final ValueChanged<Map<String, dynamic>> onDetails;
-  const _FileList({required this.files, required this.onDelete, required this.onDetails});
-
-  @override
-  Widget build(BuildContext context) => ListView.separated(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    itemCount: files.length,
-    separatorBuilder: (_, __) => const SizedBox(height: 12),
-    itemBuilder: (_, i) => FileCard(
-      file: files[i] as Map<String, dynamic>,
-      onDelete: () => onDelete(files[i]['id']),
-      onDetails: () => onDetails(files[i] as Map<String, dynamic>),
-    ),
-  );
-}
-
-// ─── File Card ─────────────────────────────────────────────────────────────────
-class FileCard extends StatefulWidget {
-  final Map<String, dynamic> file;
-  final VoidCallback onDelete;
-  final VoidCallback onDetails;
-  const FileCard({super.key, required this.file, required this.onDelete, required this.onDetails});
-
-  @override
-  State<FileCard> createState() => _FileCardState();
-}
-
-class _FileCardState extends State<FileCard> with SingleTickerProviderStateMixin {
-  bool _previewExpanded = false;
-  late AnimationController _anim;
-  late Animation<double> _heightAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 300))
-      ..addListener(() => setState(() {}));
-    _heightAnim = Tween<double>(begin: 0, end: 120).animate(
-        CurvedAnimation(parent: _anim, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() { _anim.dispose(); super.dispose(); }
-
-  void _togglePreview() {
-    setState(() => _previewExpanded = !_previewExpanded);
-    _previewExpanded ? _anim.forward() : _anim.reverse();
   }
 
   @override
   Widget build(BuildContext context) {
-    final f = widget.file;
-    final isImage = f['file_type'] == 'image';
-    final aiName = f['ai_name'] ?? f['original_name'] ?? 'Unknown';
-    final size = (f['size_bytes'] as int?) ?? 0;
+    final folders = _filteredFolders();
+    final files = _filteredFiles();
+    final hasContent = folders.isNotEmpty || files.isNotEmpty;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: AppRadius.asymmetricBR,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16)],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Top Bar ──
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: _selectedIds.isNotEmpty
+                ? _SelectionBar(
+                    key: const ValueKey('selection'),
+                    count: _selectedIds.length,
+                    onClear: () => setState(() => _selectedIds.clear()),
+                    onDelete: _deleteSelected,
+                  )
+                : _VaultHeader(
+                    key: const ValueKey('header'),
+                    selectedFolderName: _selectedFolderName,
+                    search: _search,
+                    onSearchChanged: (v) => setState(() => _search = v),
+                    onUpload: _upload,
+                    onNewFolder: _newFolder,
+                    onBack: _selectedFolderId != null ? () {
+                      setState(() {
+                        _selectedFolderId = null;
+                        _selectedFolderName = null;
+                      });
+                      _load();
+                    } : null,
+                  ),
+          ),
+
+          // ── Content ──
+          Expanded(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // File icon
-                Container(
-                  width: 56, height: 70,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    border: Border.all(color: AppColors.outlineVariant.withOpacity(0.15)),
-                  ),
-                  child: Icon(
-                    isImage ? Icons.image_outlined : Icons.description_outlined,
-                    size: 28,
-                    color: isImage ? AppColors.tertiary : AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(AppRadius.full),
-                            ),
-                            child: Text('AI SUGGESTED',
-                                style: AppTextStyles.label(9, AppColors.primary)
-                                    .copyWith(fontWeight: FontWeight.w700)),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(_formatSize(size),
-                              style: AppTextStyles.label(9, AppColors.onSurfaceVariant)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(aiName,
-                          style: AppTextStyles.headline(16, FontWeight.w700),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      Text(f['uploaded_at']?.substring(0, 10) ?? '',
-                          style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 20, color: AppColors.onSurfaceVariant),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-                  onSelected: (v) { if (v == 'delete') widget.onDelete(); },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'delete', child: Row(children: [
-                      Icon(Icons.delete_outline, size: 16), SizedBox(width: 8), Text('Delete'),
-                    ])),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Divider(color: AppColors.outlineVariant.withOpacity(0.08), height: 1),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide.none,
-                      backgroundColor: AppColors.surfaceContainerHigh,
-                      foregroundColor: AppColors.onSurface,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.lg)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    onPressed: _togglePreview,
-                    icon: Icon(_previewExpanded ? Icons.expand_less : Icons.visibility_outlined, size: 16),
-                    label: Text('Preview', style: AppTextStyles.body(12, FontWeight.w600)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.primary.withOpacity(0.2)),
-                      foregroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.lg)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    onPressed: widget.onDetails,
-                    icon: const Icon(Icons.auto_awesome_outlined, size: 16),
-                    label: Text('AI Details', style: AppTextStyles.body(12, FontWeight.w600, AppColors.primary)),
-                  ),
-                ),
-              ],
-            ),
-            // Collapsible preview
-            SizedBox(
-              height: _heightAnim.value,
-              child: ClipRect(
-                child: Opacity(
-                  opacity: _anim.value,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 60, height: 80,
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              isImage ? Icons.image_outlined : Icons.article_outlined,
-                              size: 28, color: AppColors.onSurfaceVariant.withOpacity(0.4),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
+                  child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : !hasContent
+                        ? _EmptyVault(onUpload: _upload)
+                        : SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(40, 8, 40, 40),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('AI SNAPSHOT',
-                                    style: AppTextStyles.label(9, AppColors.onSurfaceVariant)
-                                        .copyWith(fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  f['ai_summary'] ?? 'No summary available. Click "AI Details" to generate one.',
-                                  style: AppTextStyles.body(12, FontWeight.w400, AppColors.onSurfaceVariant)
-                                      .copyWith(fontStyle: FontStyle.italic),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                // ── Folders ──
+                                if (folders.isNotEmpty) ...[
+                                  _SectionLabel(label: 'Folders'),
+                                  const SizedBox(height: 8),
+                                  ...folders.map((f) => _FolderRow(
+                                    folder: f,
+                                    isSelected: _selectedIds.contains(f['id'] as String? ?? ''),
+                                    anySelected: _selectedIds.isNotEmpty,
+                                    onOpen: () {
+                                      if (_selectedIds.isNotEmpty) {
+                                        _toggleSelect(f['id'] as String? ?? '');
+                                      } else {
+                                        setState(() {
+                                          _selectedFolderId = f['id'] as String?;
+                                          _selectedFolderName = f['name'] as String?;
+                                        });
+                                        _load();
+                                      }
+                                    },
+                                    onSelect: () => _toggleSelect(f['id'] as String? ?? ''),
+                                    onDelete: () => _deleteFolder(f['id'] as String? ?? ''),
+                                    onInfo: () => setState(() {
+                                      _previewItem = Map<String, dynamic>.from(f as Map);
+                                      _previewIsFolder = true;
+                                    }),
+                                    onRename: () => _renameFolder(f['id'] as String? ?? '', f['name'] as String? ?? ''),
+                                    onSummarize: () => _summarizeFolder(f['id'] as String? ?? ''),
+                                  )),
+                                  const SizedBox(height: 28),
+                                ],
+
+                                // ── Files Grid ──
+                                if (files.isNotEmpty) ...[
+                                  _SectionLabel(label: 'Files'),
+                                  const SizedBox(height: 12),
+                                  LayoutBuilder(builder: (ctx, constraints) {
+                                    final cols = constraints.maxWidth > 1200 ? 5
+                                        : constraints.maxWidth > 900 ? 4
+                                        : constraints.maxWidth > 650 ? 3
+                                        : 2;
+                                    return GridView.builder(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: cols,
+                                        crossAxisSpacing: 14,
+                                        mainAxisSpacing: 14,
+                                        childAspectRatio: 0.72,
+                                      ),
+                                      itemCount: files.length,
+                                      itemBuilder: (_, i) {
+                                        final f = files[i];
+                                        return _DriveFileCard(
+                                          file: f,
+                                          isSelected: _selectedIds.contains(f['id'] as String? ?? ''),
+                                          anySelected: _selectedIds.isNotEmpty,
+                                          onTap: () {
+                                            if (_selectedIds.isNotEmpty) {
+                                              _toggleSelect(f['id'] as String? ?? '');
+                                            } else {
+                                              setState(() {
+                                                _previewItem = Map<String, dynamic>.from(f as Map);
+                                                _previewIsFolder = false;
+                                              });
+                                            }
+                                          },
+                                          onSelect: () => _toggleSelect(f['id'] as String? ?? ''),
+                                          onDelete: () => _deleteFile(f['id'] as String? ?? ''),
+                                          onInfo: () => setState(() {
+                                            _previewItem = Map<String, dynamic>.from(f as Map);
+                                            _previewIsFolder = false;
+                                          }),
+                                          onSummarize: () => _summarizeFile(f['id'] as String? ?? ''),
+                                        );
+                                      },
+                                    );
+                                  }),
+                                ],
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ),
-              ),
+                if (_previewItem != null)
+                  _DetailsPanel(
+                    item: _previewItem!,
+                    isFolder: _previewIsFolder,
+                    onClose: () => setState(() => _previewItem = null),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
-  }
 }
 
-// ─── AI Summary Panel ──────────────────────────────────────────────────────────
-class _AiSummaryPanel extends StatelessWidget {
-  final Map<String, dynamic> file;
-  final VoidCallback onClose;
-  const _AiSummaryPanel({required this.file, required this.onClose});
+// ─── Selection Bar ─────────────────────────────────────────────────────────────
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onClear;
+  final VoidCallback onDelete;
+  const _SelectionBar({super.key, required this.count, required this.onClear, required this.onDelete});
 
   @override
   Widget build(BuildContext context) => Container(
-    width: 380,
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
     decoration: BoxDecoration(
-      color: AppColors.surfaceContainerLowest.withOpacity(0.95),
-      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 32, offset: const Offset(-4, 0))],
+      color: AppColors.surfaceContainerHigh,
+      border: Border(
+        bottom: BorderSide(color: AppColors.outlineVariant.withOpacity(0.25)),
+      ),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    child: Row(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 16, 0),
+        IconButton(
+          icon: const Icon(Icons.close, size: 20),
+          onPressed: onClear,
+          color: AppColors.onSurface,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        const SizedBox(width: 16),
+        Text('$count selected',
+            style: AppTextStyles.body(15, FontWeight.w600)),
+        const SizedBox(width: 20),
+        OutlinedButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.auto_awesome_outlined, size: 15),
+          label: const Text('Summarize this folder'),
+          style: OutlinedButton.styleFrom(
+            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            side: BorderSide(color: AppColors.outlineVariant),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            foregroundColor: AppColors.onSurface,
+          ),
+        ),
+        const Spacer(),
+        _SelBtn(icon: Icons.person_add_outlined, tooltip: 'Share'),
+        _SelBtn(icon: Icons.download_outlined, tooltip: 'Download'),
+        _SelBtn(icon: Icons.drive_file_move_outlined, tooltip: 'Move'),
+        _SelBtn(icon: Icons.link_outlined, tooltip: 'Copy link'),
+        _SelBtn(icon: Icons.delete_outline, tooltip: 'Move to trash', onTap: onDelete),
+        _SelBtn(icon: Icons.more_vert, tooltip: 'More options'),
+      ],
+    ),
+  );
+}
+
+class _SelBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _SelBtn({required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    icon: Icon(icon, size: 20, color: AppColors.onSurface),
+    tooltip: tooltip,
+    onPressed: onTap ?? () {},
+    padding: const EdgeInsets.all(8),
+    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+  );
+}
+
+// ─── Vault Header ──────────────────────────────────────────────────────────────
+class _VaultHeader extends StatelessWidget {
+  final String? selectedFolderName;
+  final String search;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onUpload;
+  final VoidCallback onNewFolder;
+  final VoidCallback? onBack;
+  const _VaultHeader({
+    super.key,
+    required this.selectedFolderName,
+    required this.search,
+    required this.onSearchChanged,
+    required this.onUpload,
+    required this.onNewFolder,
+    this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(40, 28, 40, 16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (onBack != null) ...[
+          IconButton(
+            icon: const Icon(Icons.arrow_back, size: 20, color: AppColors.onSurfaceVariant),
+            onPressed: onBack,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 36),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('PERSONAL ARCHIVES',
+                style: AppTextStyles.label(10, AppColors.primary)
+                    .copyWith(letterSpacing: 2, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(selectedFolderName ?? 'Clinical Vault',
+                style: AppTextStyles.headline(28, FontWeight.w700)),
+          ],
+        ),
+        const Spacer(),
+        // Search box
+        Container(
+          width: 240,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
           child: Row(
             children: [
-              const Icon(Icons.auto_awesome_outlined, color: AppColors.primary),
-              const SizedBox(width: 10),
+              const Icon(Icons.search, size: 17, color: AppColors.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  decoration: const InputDecoration.collapsed(hintText: 'Search...'),
+                  style: AppTextStyles.body(13),
+                  onChanged: onSearchChanged,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: AppColors.outlineVariant),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          ),
+          onPressed: onNewFolder,
+          icon: const Icon(Icons.create_new_folder_outlined, size: 17),
+          label: Text('New Folder', style: AppTextStyles.body(13, FontWeight.w500)),
+        ),
+        const SizedBox(width: 10),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          ),
+          onPressed: onUpload,
+          icon: const Icon(Icons.upload_file_outlined, size: 17),
+          label: const Text('Upload'),
+        ),
+      ],
+    ),
+  );
+}
+
+// ─── Section label ─────────────────────────────────────────────────────────────
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(label,
+        style: AppTextStyles.label(11, AppColors.onSurfaceVariant)
+            .copyWith(letterSpacing: 1.4, fontWeight: FontWeight.w700)),
+  );
+}
+
+// ─── Folder Row ────────────────────────────────────────────────────────────────
+class _FolderRow extends StatefulWidget {
+  final Map<String, dynamic> folder;
+  final bool isSelected;
+  final bool anySelected;
+  final VoidCallback onOpen;
+  final VoidCallback onSelect;
+  final VoidCallback onDelete;
+  final VoidCallback? onRename;
+  final VoidCallback? onInfo;
+  final VoidCallback? onSummarize;
+  const _FolderRow({
+    required this.folder,
+    required this.isSelected,
+    required this.anySelected,
+    required this.onOpen,
+    required this.onSelect,
+    required this.onDelete,
+    this.onRename,
+    this.onInfo,
+    this.onSummarize,
+  });
+
+  @override
+  State<_FolderRow> createState() => _FolderRowState();
+}
+
+class _FolderRowState extends State<_FolderRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.folder['name'] ?? 'Folder';
+    final count = widget.folder['file_count'] ?? 0;
+    final isSelected = widget.isSelected;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onOpen,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary.withOpacity(0.12)
+                : _hovered
+                    ? AppColors.surfaceContainerHigh
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.primary.withOpacity(0.35)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Checkbox / folder icon
+              GestureDetector(
+                onTap: widget.onSelect,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary
+                        : (_hovered || widget.anySelected)
+                            ? AppColors.surfaceContainerLowest
+                            : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: (_hovered || isSelected || widget.anySelected)
+                        ? Border.all(
+                            color: isSelected ? AppColors.primary : AppColors.outlineVariant,
+                            width: 1.5)
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                      : Icon(Icons.folder, size: 20,
+                            color: (_hovered || widget.anySelected)
+                                ? AppColors.onSurface
+                                : const Color(0xFF5F6368)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Name & count
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('AI Summary Insight',
-                        style: AppTextStyles.headline(16, FontWeight.w700)),
-                    Text('Synthesizing clinical data...',
-                        style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
+                    Text(name,
+                        style: AppTextStyles.body(14, FontWeight.w500),
+                        overflow: TextOverflow.ellipsis),
+                    if (count > 0)
+                      Text('$count ${count == 1 ? 'item' : 'items'}',
+                          style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
                   ],
                 ),
               ),
-              IconButton(onPressed: onClose, icon: const Icon(Icons.close, size: 18)),
+              // Three-dot menu
+              if (_hovered || isSelected)
+                _DriveContextMenu(
+                  isFolder: true,
+                  itemName: name,
+                  onDelete: widget.onDelete,
+                  onRename: widget.onRename,
+                  onInfo: widget.onInfo,
+                  onSummarize: widget.onSummarize,
+                  buttonBuilder: (onTap) => InkWell(
+                    onTap: onTap,
+                    customBorder: const CircleBorder(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(Icons.more_vert, size: 18,
+                          color: AppColors.onSurfaceVariant),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: 20),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+    );
+  }
+}
+
+// ─── Drive File Card ───────────────────────────────────────────────────────────
+class _DriveFileCard extends StatefulWidget {
+  final Map<String, dynamic> file;
+  final bool isSelected;
+  final bool anySelected;
+  final VoidCallback onTap;
+  final VoidCallback onSelect;
+  final VoidCallback onDelete;
+  final VoidCallback? onInfo;
+  final VoidCallback? onSummarize;
+  const _DriveFileCard({
+    required this.file,
+    required this.isSelected,
+    required this.anySelected,
+    required this.onTap,
+    required this.onSelect,
+    required this.onDelete,
+    this.onInfo,
+    this.onSummarize,
+  });
+
+  @override
+  State<_DriveFileCard> createState() => _DriveFileCardState();
+}
+
+class _DriveFileCardState extends State<_DriveFileCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.file;
+    final name = (f['ai_name'] ?? f['original_name'] ?? 'Untitled') as String;
+    final fileType = (f['file_type'] ?? 'pdf') as String;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? AppColors.primary.withOpacity(0.08)
+                : AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: widget.isSelected
+                  ? AppColors.primary.withOpacity(0.45)
+                  : _hovered
+                      ? AppColors.outlineVariant.withOpacity(0.5)
+                      : AppColors.outlineVariant.withOpacity(0.2),
+              width: widget.isSelected ? 2 : 1,
+            ),
+            boxShadow: _hovered && !widget.isSelected ? [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 8, offset: const Offset(0, 2),
+              )
+            ] : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Thumbnail ──
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Document preview fills the thumbnail area
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+                      child: SizedBox.expand(
+                        child: _DocumentThumbnail(
+                          fileType: fileType,
+                          fileName: name,
+                        ),
+                      ),
+                    ),
+
+                    // Checkbox (top-left)
+                    if (_hovered || widget.isSelected || widget.anySelected)
+                      Positioned(
+                        top: 8, left: 8,
+                        child: GestureDetector(
+                          onTap: widget.onSelect,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 22, height: 22,
+                            decoration: BoxDecoration(
+                              color: widget.isSelected ? AppColors.primary : Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: widget.isSelected
+                                    ? AppColors.primary
+                                    : Colors.grey.shade400,
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.12),
+                                  blurRadius: 4,
+                                )
+                              ],
+                            ),
+                            child: widget.isSelected
+                                ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                : null,
+                          ),
+                        ),
+                      ),
+
+                    // Three-dot menu (top-right)
+                    if (_hovered || widget.isSelected)
+                      Positioned(
+                        top: 6, right: 6,
+                        child: _DriveContextMenu(
+                          isFolder: false,
+                          itemName: name,
+                          onDelete: widget.onDelete,
+                          onInfo: widget.onInfo,
+                          onSummarize: widget.onSummarize,
+                          buttonBuilder: (onTap) => GestureDetector(
+                            onTap: onTap,
+                            child: Container(
+                              width: 28, height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.92),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.12),
+                                    blurRadius: 4,
+                                  )
+                                ],
+                              ),
+                              child: const Icon(Icons.more_vert, size: 16,
+                                  color: Color(0xFF5F6368)),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // ── Name Bar ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _hovered
+                      ? AppColors.surfaceContainerLow
+                      : AppColors.surfaceContainerLowest,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(7)),
+                  border: Border(
+                    top: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.18)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _FileTypeBadge(fileType: fileType),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: AppTextStyles.body(12, FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Document Thumbnail ────────────────────────────────────────────────────────
+class _DocumentThumbnail extends StatelessWidget {
+  final String fileType;
+  final String fileName;
+  const _DocumentThumbnail({required this.fileType, required this.fileName});
+
+  @override
+  Widget build(BuildContext context) {
+    if (fileType == 'image') {
+      return Container(
+        color: const Color(0xFFF3F4F6),
+        child: const Center(
+          child: Icon(Icons.image_outlined, size: 52, color: Color(0xFF9CA3AF)),
+        ),
+      );
+    }
+
+    // PDF / document preview
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Simulated document header
+          Container(
+            height: 36,
+            color: const Color(0xFFF8F9FA),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
               children: [
-                Text(file['ai_name'] ?? file['original_name'] ?? '',
-                    style: AppTextStyles.headline(15, FontWeight.w700)),
-                const SizedBox(height: 6),
-                Text('${file['file_type']?.toUpperCase()} • Uploaded ${file['uploaded_at']?.substring(0, 10) ?? ''}',
-                    style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
-                const SizedBox(height: 20),
-                _InsightBlock(
-                  icon: Icons.trending_up,
-                  color: AppColors.primary,
-                  label: 'KEY TREND',
-                  text: file['ai_summary'] ??
-                      'No AI summary generated yet. This record has been indexed for chat queries.',
-                ),
-                const SizedBox(height: 12),
-                _InsightBlock(
-                  icon: Icons.warning_amber_outlined,
-                  color: AppColors.tertiary,
-                  label: 'CLINICAL NOTE',
-                  text: 'File successfully processed and available for AI-assisted analysis in the Chat screen.',
-                  bgColor: AppColors.tertiaryFixed.withOpacity(0.3),
-                ),
+                _shimmerLine(56, 7),
+                const SizedBox(width: 6),
+                _shimmerLine(36, 7),
+                const Spacer(),
+                _shimmerLine(20, 7),
               ],
             ),
           ),
-        ),
-      ],
+          // Content area
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _docLine(1.0, thick: true),
+                  const SizedBox(height: 5),
+                  _docLine(0.85),
+                  const SizedBox(height: 4),
+                  _docLine(0.92),
+                  const SizedBox(height: 4),
+                  _docLine(0.68),
+                  const SizedBox(height: 9),
+                  _docLine(0.78),
+                  const SizedBox(height: 4),
+                  _docLine(0.95),
+                  const SizedBox(height: 4),
+                  _docLine(0.82),
+                  const SizedBox(height: 4),
+                  _docLine(0.56),
+                  const SizedBox(height: 9),
+                  _docLine(0.88),
+                  const SizedBox(height: 4),
+                  _docLine(0.73),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shimmerLine(double width, double height) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: const Color(0xFFDADCE0),
+      borderRadius: BorderRadius.circular(3),
+    ),
+  );
+
+  Widget _docLine(double fraction, {bool thick = false}) => LayoutBuilder(
+    builder: (_, c) => Container(
+      width: c.maxWidth * fraction,
+      height: thick ? 8 : 5.5,
+      decoration: BoxDecoration(
+        color: thick ? const Color(0xFF5F6368) : const Color(0xFFDADCE0),
+        borderRadius: BorderRadius.circular(3),
+      ),
     ),
   );
 }
 
-class _InsightBlock extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label, text;
-  final Color? bgColor;
-  const _InsightBlock({required this.icon, required this.color,
-      required this.label, required this.text, this.bgColor});
+// ─── File Type Badge ───────────────────────────────────────────────────────────
+class _FileTypeBadge extends StatelessWidget {
+  final String fileType;
+  const _FileTypeBadge({required this.fileType});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: bgColor ?? AppColors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 6),
-            Text(label, style: AppTextStyles.label(10, color).copyWith(fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(text, style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurface)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final isPdf = fileType == 'pdf' || fileType == 'document';
+    final isImg = fileType == 'image';
+    final label = isImg ? 'IMG' : isPdf ? 'PDF' : 'DOC';
+    final color = isImg ? const Color(0xFF34A853) : const Color(0xFFEA4335);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color, borderRadius: BorderRadius.circular(3)),
+      child: Text(label,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800,
+              letterSpacing: 0.5)),
+    );
+  }
 }
 
+// ─── Drive-style Context Menu ──────────────────────────────────────────────────
+typedef _MenuButtonBuilder = Widget Function(VoidCallback onTap);
+
+class _DriveContextMenu extends StatelessWidget {
+  final bool isFolder;
+  final String itemName;
+  final VoidCallback onDelete;
+  final VoidCallback? onRename;
+  final VoidCallback? onInfo;
+  final VoidCallback? onSummarize;
+  final _MenuButtonBuilder buttonBuilder;
+
+  const _DriveContextMenu({
+    required this.isFolder,
+    required this.itemName,
+    required this.onDelete,
+    this.onRename,
+    this.onInfo,
+    this.onSummarize,
+    required this.buttonBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(
+      builder: (ctx) => buttonBuilder(() => _showMenu(ctx)),
+    );
+  }
+
+  void _showMenu(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final position = box.localToGlobal(Offset.zero);
+    final size = box.size;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy + size.height,
+        position.dx + 260,
+        position.dy + size.height + 400,
+      ),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      items: [
+        _item('download', Icons.download_outlined, 'Download'),
+        _item('rename', Icons.edit_outlined, 'Rename', shortcut: 'Ctrl+Alt+E'),
+        _item('summarize', Icons.auto_awesome_outlined,
+            isFolder ? 'Summarize this folder' : 'Summarize file'),
+        const PopupMenuDivider(height: 1),
+        _item('share', Icons.person_add_outlined, 'Share', hasArrow: true),
+        _item('organize', Icons.folder_outlined, 'Organize', hasArrow: true),
+        _item('info', Icons.info_outline,
+            isFolder ? 'Folder information' : 'File information', hasArrow: true),
+        const PopupMenuDivider(height: 1),
+        _item('trash', Icons.delete_outline, 'Move to trash',
+            shortcut: 'Delete', isDestructive: true),
+      ],
+    );
+
+    if (result == 'trash') {
+      onDelete();
+    } else if (result == 'rename' && onRename != null) {
+      onRename!();
+    } else if (result == 'info' && onInfo != null) {
+      onInfo!();
+    } else if (result == 'summarize' && onSummarize != null) {
+      onSummarize!();
+    }
+  }
+
+  PopupMenuItem<String> _item(
+    String value,
+    IconData icon,
+    String label, {
+    String? shortcut,
+    bool hasArrow = false,
+    bool isDestructive = false,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Icon(icon, size: 18,
+              color: isDestructive ? const Color(0xFFD93025) : const Color(0xFF3C4043)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDestructive ? const Color(0xFFD93025) : const Color(0xFF3C4043),
+                  fontWeight: FontWeight.w400,
+                )),
+          ),
+          if (shortcut != null) ...[
+            const SizedBox(width: 12),
+            Text(shortcut,
+                style: const TextStyle(fontSize: 11.5, color: Color(0xFF9AA0A6))),
+          ],
+          if (hasArrow)
+            const Icon(Icons.chevron_right, size: 16, color: Color(0xFF9AA0A6)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty State ───────────────────────────────────────────────────────────────
 class _EmptyVault extends StatelessWidget {
   final VoidCallback onUpload;
   const _EmptyVault({required this.onUpload});
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 60),
-      child: Column(
-        children: [
-          Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.primaryFixed.withOpacity(0.3),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.folder_open_outlined, size: 36, color: AppColors.primary),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 80, height: 80,
+          decoration: BoxDecoration(
+            color: AppColors.primaryFixed.withOpacity(0.3),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 16),
-          Text('No records found', style: AppTextStyles.headline(18, FontWeight.w600)),
-          const SizedBox(height: 8),
-          Text('Upload your first medical document to get started.',
-              style: AppTextStyles.body(14, FontWeight.w400, AppColors.onSurfaceVariant)),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: onUpload,
-            icon: const Icon(Icons.upload_file_outlined, size: 18),
-            label: const Text('Upload Record'),
+          child: const Icon(Icons.folder_open_outlined, size: 36, color: AppColors.primary),
+        ),
+        const SizedBox(height: 16),
+        Text('No records found', style: AppTextStyles.headline(18, FontWeight.w600)),
+        const SizedBox(height: 8),
+        Text('Upload your first medical document to get started.',
+            style: AppTextStyles.body(14, FontWeight.w400, AppColors.onSurfaceVariant)),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(
+          onPressed: onUpload,
+          icon: const Icon(Icons.upload_file_outlined, size: 18),
+          label: const Text('Upload Record'),
+        ),
+      ],
+    ),
+  );
+}
+
+// Public re-exports used by other screens (FolderCard / FileCard)
+class FolderCard extends StatelessWidget {
+  final Map<String, dynamic> folder;
+  final VoidCallback onTap;
+  const FolderCard({super.key, required this.folder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => _FolderRow(
+    folder: folder,
+    isSelected: false,
+    anySelected: false,
+    onOpen: onTap,
+    onSelect: () {},
+    onDelete: () {},
+  );
+}
+
+class FileCard extends StatelessWidget {
+  final Map<String, dynamic> file;
+  final VoidCallback onDelete;
+  final VoidCallback onDetails;
+  const FileCard({super.key, required this.file, required this.onDelete, required this.onDetails});
+
+  @override
+  Widget build(BuildContext context) => _DriveFileCard(
+    file: file,
+    isSelected: false,
+    anySelected: false,
+    onTap: onDetails,
+    onSelect: () {},
+    onDelete: onDelete,
+  );
+}
+
+// ─── Details Panel ─────────────────────────────────────────────────────────────
+class _DetailsPanel extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool isFolder;
+  final VoidCallback onClose;
+
+  const _DetailsPanel({
+    super.key,
+    required this.item,
+    required this.isFolder,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = isFolder
+        ? (item['name'] ?? 'Folder')
+        : (item['ai_name'] ?? item['original_name'] ?? 'Untitled');
+    final aiSummary = item['ai_summary'] as String?;
+    final date = isFolder ? item['created_at'] : item['uploaded_at'];
+    final parsedDate = date != null ? DateTime.tryParse(date.toString()) : null;
+    final dateStr = parsedDate != null ? '${parsedDate.month}/${parsedDate.day}/${parsedDate.year}' : 'Unknown date';
+
+    return Container(
+      width: 320,
+      margin: const EdgeInsets.only(left: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(left: BorderSide(color: AppColors.outlineVariant.withOpacity(0.3))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(isFolder ? 'Folder Details' : 'File Details',
+                      style: AppTextStyles.headline(16, FontWeight.w600)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: onClose,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // THUMBNAIL
+                  Container(
+                    width: double.infinity,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.outlineVariant.withOpacity(0.3)),
+                    ),
+                    child: Center(
+                      child: isFolder
+                          ? const Icon(Icons.folder, size: 64, color: AppColors.primary)
+                          : _DocumentThumbnail(
+                              fileType: item['file_type'] ?? 'pdf',
+                              fileName: name.toString(),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(name.toString(), style: AppTextStyles.body(16, FontWeight.w600)),
+                  const SizedBox(height: 24),
+                  
+                  // AI OVERVIEW
+                  if (!isFolder && aiSummary != null && aiSummary.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text('AI Overview', style: AppTextStyles.label(12, AppColors.primary).copyWith(fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(aiSummary, style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurface.withOpacity(0.8))),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // PROPS
+                  Text('Information', style: AppTextStyles.label(12, AppColors.onSurfaceVariant).copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  _PropRow('Type', isFolder ? 'Folder' : (item['file_type'] ?? 'File')),
+                  _PropRow(isFolder ? 'Created' : 'Uploaded', dateStr),
+                  if (item['size_bytes'] != null)
+                    _PropRow('Size', '${((item['size_bytes'] as int) / 1024).toStringAsFixed(1)} KB'),
+                  if (isFolder && item['file_count'] != null)
+                    _PropRow('Items', '${item['file_count']}'),
+                ],
+              ),
+            ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _PropRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _PropRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: AppTextStyles.body(13, FontWeight.w500, AppColors.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(value, style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurface)),
+          ),
+        ],
+      ),
+    );
+  }
 }
