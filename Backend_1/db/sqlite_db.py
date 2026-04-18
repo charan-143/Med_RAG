@@ -28,6 +28,7 @@ def init_db():
                 id          TEXT PRIMARY KEY,
                 name        TEXT NOT NULL UNIQUE,
                 icon        TEXT DEFAULT 'folder',
+                ai_summary  TEXT,
                 created_at  TEXT NOT NULL
             );
 
@@ -111,6 +112,10 @@ def init_db():
                 VALUES ('default','Julian Thorne','1985-05-24','Male','A+',
                     '+1 (555) 012-3344','j.thorne@atelier.care','BlueShield Premium Elite',?)
             """, (now,))
+        try:
+            conn.execute("ALTER TABLE folders ADD COLUMN ai_summary TEXT;")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 
@@ -129,6 +134,28 @@ def create_folder(name: str, icon: str = "folder") -> dict:
         conn.commit()
         return {"id": fid, "name": name, "icon": icon, "created_at": now}
 
+def update_folder(folder_id: str, name: str = None, icon: str = None) -> dict | None:
+    with get_conn() as conn:
+        updates = []
+        vals = []
+        if name is not None:
+            updates.append("name=?")
+            vals.append(name)
+        if icon is not None:
+            updates.append("icon=?")
+            vals.append(icon)
+            
+        if not updates:
+            r = conn.execute("SELECT * FROM folders WHERE id=?", (folder_id,)).fetchone()
+            return dict(r) if r else None
+
+        vals.append(folder_id)
+        set_clause = ", ".join(updates)
+        conn.execute(f"UPDATE folders SET {set_clause} WHERE id=?", vals)
+        conn.commit()
+        r = conn.execute("SELECT * FROM folders WHERE id=?", (folder_id,)).fetchone()
+        return dict(r) if r else None
+
 def delete_folder(folder_id: str):
     with get_conn() as conn:
         conn.execute("DELETE FROM folders WHERE id=?", (folder_id,))
@@ -138,6 +165,12 @@ def get_folder_file_count(folder_id: str) -> int:
     with get_conn() as conn:
         r = conn.execute("SELECT COUNT(*) FROM files WHERE folder_id=?", (folder_id,)).fetchone()
         return r[0] if r else 0
+
+def update_folder_ai(folder_id: str, ai_summary: str = None):
+    with get_conn() as conn:
+        if ai_summary:
+            conn.execute("UPDATE folders SET ai_summary=? WHERE id=?", (ai_summary, folder_id))
+            conn.commit()
 
 
 # ─── File helpers ───────────────────────────────────────────────────────────────

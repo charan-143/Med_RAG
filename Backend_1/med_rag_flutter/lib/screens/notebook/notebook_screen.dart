@@ -26,7 +26,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     try {
       final notes = await ApiService.getNotes();
       if (mounted) setState(() {
-        _notes = notes.cast<Map<String, dynamic>>();
+        _notes = notes.map((e) => e as Map<String, dynamic>).toList();
         _loading = false;
         if (_notes.isNotEmpty && _activeNote == null) _selectNote(_notes.first);
       });
@@ -312,7 +312,7 @@ class _FormattingToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
       color: AppColors.surfaceContainerHighest.withOpacity(0.9),
       borderRadius: BorderRadius.circular(AppRadius.xl),
@@ -320,21 +320,32 @@ class _FormattingToolbar extends StatelessWidget {
     ),
     child: Row(
       children: [
-        _ToolBtn(icon: Icons.format_bold),
-        _ToolBtn(icon: Icons.format_italic),
-        _ToolBtn(icon: Icons.format_underlined),
-        const _Divider(),
-        _ToolBtn(icon: Icons.format_align_left),
-        _ToolBtn(icon: Icons.format_align_center),
-        const _Divider(),
-        _ToolBtn(icon: Icons.format_list_bulleted),
-        _ToolBtn(icon: Icons.format_list_numbered),
-        _ToolBtn(icon: Icons.link),
-        const Spacer(),
+        // Scrollable toolbar buttons — prevents overflow on narrow windows
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ToolBtn(icon: Icons.format_bold),
+                _ToolBtn(icon: Icons.format_italic),
+                _ToolBtn(icon: Icons.format_underlined),
+                const _Divider(),
+                _ToolBtn(icon: Icons.format_align_left),
+                _ToolBtn(icon: Icons.format_align_center),
+                const _Divider(),
+                _ToolBtn(icon: Icons.format_list_bulleted),
+                _ToolBtn(icon: Icons.format_list_numbered),
+                _ToolBtn(icon: Icons.link),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         ElevatedButton.icon(
           onPressed: onSave,
           style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
           ),
@@ -342,7 +353,7 @@ class _FormattingToolbar extends StatelessWidget {
               ? const SizedBox(width: 14, height: 14,
                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Icon(Icons.save_outlined, size: 16),
-          label: Text(saving ? 'Saving...' : 'Save Changes',
+          label: Text(saving ? 'Saving...' : 'Save',
               style: AppTextStyles.body(13, FontWeight.w600, Colors.white)),
         ),
       ],

@@ -290,48 +290,42 @@ class _VaultScreenState extends State<VaultScreen> {
                                 if (files.isNotEmpty) ...[
                                   _SectionLabel(label: 'Files'),
                                   const SizedBox(height: 12),
-                                  LayoutBuilder(builder: (ctx, constraints) {
-                                    final cols = constraints.maxWidth > 1200 ? 5
-                                        : constraints.maxWidth > 900 ? 4
-                                        : constraints.maxWidth > 650 ? 3
-                                        : 2;
-                                    return GridView.builder(
-                                      shrinkWrap: true,
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: cols,
-                                        crossAxisSpacing: 14,
-                                        mainAxisSpacing: 14,
-                                        childAspectRatio: 0.72,
-                                      ),
-                                      itemCount: files.length,
-                                      itemBuilder: (_, i) {
-                                        final f = files[i];
-                                        return _DriveFileCard(
-                                          file: f,
-                                          isSelected: _selectedIds.contains(f['id'] as String? ?? ''),
-                                          anySelected: _selectedIds.isNotEmpty,
-                                          onTap: () {
-                                            if (_selectedIds.isNotEmpty) {
-                                              _toggleSelect(f['id'] as String? ?? '');
-                                            } else {
-                                              setState(() {
-                                                _previewItem = Map<String, dynamic>.from(f as Map);
-                                                _previewIsFolder = false;
-                                              });
-                                            }
-                                          },
-                                          onSelect: () => _toggleSelect(f['id'] as String? ?? ''),
-                                          onDelete: () => _deleteFile(f['id'] as String? ?? ''),
-                                          onInfo: () => setState(() {
-                                            _previewItem = Map<String, dynamic>.from(f as Map);
-                                            _previewIsFolder = false;
-                                          }),
-                                          onSummarize: () => _summarizeFile(f['id'] as String? ?? ''),
-                                        );
-                                      },
-                                    );
-                                  }),
+                                  GridView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 220,
+                                      crossAxisSpacing: 14,
+                                      mainAxisSpacing: 14,
+                                      childAspectRatio: 0.72,
+                                    ),
+                                    itemCount: files.length,
+                                    itemBuilder: (_, i) {
+                                      final f = files[i];
+                                      return _DriveFileCard(
+                                        file: f,
+                                        isSelected: _selectedIds.contains(f['id'] as String? ?? ''),
+                                        anySelected: _selectedIds.isNotEmpty,
+                                        onTap: () {
+                                          if (_selectedIds.isNotEmpty) {
+                                            _toggleSelect(f['id'] as String? ?? '');
+                                          } else {
+                                            setState(() {
+                                              _previewItem = Map<String, dynamic>.from(f as Map);
+                                              _previewIsFolder = false;
+                                            });
+                                          }
+                                        },
+                                        onSelect: () => _toggleSelect(f['id'] as String? ?? ''),
+                                        onDelete: () => _deleteFile(f['id'] as String? ?? ''),
+                                        onInfo: () => setState(() {
+                                          _previewItem = Map<String, dynamic>.from(f as Map);
+                                          _previewIsFolder = false;
+                                        }),
+                                        onSummarize: () => _summarizeFile(f['id'] as String? ?? ''),
+                                      );
+                                    },
+                                  ),
                                 ],
                               ],
                             ),

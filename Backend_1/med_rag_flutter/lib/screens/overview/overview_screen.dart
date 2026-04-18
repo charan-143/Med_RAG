@@ -42,7 +42,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   const SizedBox(height: 32),
                   _BentoGrid(stats: _stats ?? {}),
                   const SizedBox(height: 40),
-                  _ClinicalInsightsSection(),
+                  const _ClinicalInsightsSection(),
                 ],
               ),
             ),
@@ -50,6 +50,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 }
 
+// ─── Header ────────────────────────────────────────────────────────────────────
 class _Header extends StatelessWidget {
   final VoidCallback onRefresh;
   const _Header({required this.onRefresh});
@@ -78,8 +79,10 @@ class _Header extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.full),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.onSurfaceVariant),
+              const Icon(Icons.calendar_today_outlined, size: 16,
+                  color: AppColors.onSurfaceVariant),
               const SizedBox(width: 8),
               Text(_today(), style: AppTextStyles.body(13, FontWeight.w500)),
             ],
@@ -88,7 +91,8 @@ class _Header extends StatelessWidget {
         const SizedBox(width: 12),
         IconButton(
           onPressed: onRefresh,
-          icon: const Icon(Icons.refresh_outlined, color: AppColors.onSurfaceVariant),
+          icon: const Icon(Icons.refresh_outlined,
+              color: AppColors.onSurfaceVariant),
         ),
       ],
     );
@@ -96,11 +100,15 @@ class _Header extends StatelessWidget {
 
   String _today() {
     final now = DateTime.now();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
     return '${months[now.month - 1]} ${now.day}, ${now.year}';
   }
 }
 
+// ─── Bento Grid ────────────────────────────────────────────────────────────────
 class _BentoGrid extends StatelessWidget {
   final Map<String, dynamic> stats;
   const _BentoGrid({required this.stats});
@@ -108,38 +116,42 @@ class _BentoGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = stats['total_records'] ?? 0;
-    final byType = (stats['by_type'] as Map<String, dynamic>?) ?? {};
+    final byType = stats['by_type'] is Map
+        ? Map<String, dynamic>.from(stats['by_type'] as Map)
+        : <String, dynamic>{};
     final recent = (stats['recent_files'] as List?) ?? [];
 
     return Column(
       children: [
         // Row 1: Total Records + Vitals
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 4,
-              child: _TotalRecordsCard(total: total),
-            ),
-            const SizedBox(width: 24),
-            const Expanded(flex: 8, child: _VitalsCard()),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 4, child: _TotalRecordsCard(total: total)),
+              const SizedBox(width: 24),
+              Expanded(flex: 8, child: _VitalsCard()),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
         // Row 2: Distribution chart + Recent
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 7, child: _DistributionCard(byType: byType)),
-            const SizedBox(width: 24),
-            Expanded(flex: 5, child: _RecentArchivesCard(recent: recent)),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 7, child: _DistributionCard(byType: byType)),
+              const SizedBox(width: 24),
+              Expanded(flex: 5, child: _RecentArchivesCard(recent: recent)),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
+// ─── Total Records Card ─────────────────────────────────────────────────────────
 class _TotalRecordsCard extends StatelessWidget {
   final int total;
   const _TotalRecordsCard({required this.total});
@@ -159,10 +171,14 @@ class _TotalRecordsCard extends StatelessWidget {
                 color: AppColors.primaryFixed,
                 borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
-              child: const Icon(Icons.description_outlined, color: AppColors.onPrimaryFixedVar),
+              child: const Icon(Icons.description_outlined,
+                  color: AppColors.onPrimaryFixedVar),
             ),
-            Text('+12% Monthly',
-                style: AppTextStyles.body(11, FontWeight.w700, AppColors.tertiary)),
+            Flexible(
+              child: Text('+12% Monthly',
+                  style: AppTextStyles.body(11, FontWeight.w700, AppColors.tertiary),
+                  overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -170,12 +186,16 @@ class _TotalRecordsCard extends StatelessWidget {
             style: AppTextStyles.label(10, AppColors.onSurfaceVariant)
                 .copyWith(letterSpacing: 1.5, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('$total',
-            style: AppTextStyles.headline(52, FontWeight.w700, AppColors.primary)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text('$total',
+              style: AppTextStyles.headline(52, FontWeight.w700, AppColors.primary)),
+        ),
         const SizedBox(height: 16),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
+          child: const LinearProgressIndicator(
             value: 0.72,
             minHeight: 6,
             backgroundColor: AppColors.surfaceContainerHigh,
@@ -190,6 +210,7 @@ class _TotalRecordsCard extends StatelessWidget {
   );
 }
 
+// ─── Vitals Card ────────────────────────────────────────────────────────────────
 class _VitalsCard extends StatelessWidget {
   const _VitalsCard();
 
@@ -197,11 +218,16 @@ class _VitalsCard extends StatelessWidget {
   Widget build(BuildContext context) => _BaseCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Recent Vitals', style: AppTextStyles.headline(18, FontWeight.w600)),
+            Flexible(
+              child: Text('Recent Vitals',
+                  style: AppTextStyles.headline(18, FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+            ),
             TextButton(
               onPressed: () {},
               child: Text('Full Report',
@@ -211,14 +237,14 @@ class _VitalsCard extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Row(
-          children: [
+          children: const [
             Expanded(child: _VitalTile(icon: Icons.favorite_outline, label: 'Heart Rate',
                 value: '72', unit: 'BPM', color: AppColors.tertiary)),
-            const SizedBox(width: 16),
-            Expanded(child: _VitalTile(icon: Icons.monitor_heart_outlined, label: 'Blood Pressure',
+            SizedBox(width: 12),
+            Expanded(child: _VitalTile(icon: Icons.monitor_heart_outlined, label: 'BP',
                 value: '120/80', unit: 'mmHg', color: AppColors.primary)),
-            const SizedBox(width: 16),
-            Expanded(child: _VitalTile(icon: Icons.thermostat_outlined, label: 'Temperature',
+            SizedBox(width: 12),
+            Expanded(child: _VitalTile(icon: Icons.thermostat_outlined, label: 'Temp',
                 value: '98.6', unit: '°F', color: AppColors.onPrimaryFixedVar)),
           ],
         ),
@@ -227,6 +253,7 @@ class _VitalsCard extends StatelessWidget {
   );
 }
 
+// ─── Vital Tile ─────────────────────────────────────────────────────────────────
 class _VitalTile extends StatelessWidget {
   final IconData icon;
   final String label, value, unit;
@@ -236,125 +263,133 @@ class _VitalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: AppColors.surfaceContainerLow,
       borderRadius: BorderRadius.circular(AppRadius.lg),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 22),
-        const SizedBox(height: 10),
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 8),
         Text(label.toUpperCase(),
             style: AppTextStyles.label(9, AppColors.onSurfaceVariant)
-                .copyWith(letterSpacing: 1.2, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(value, style: AppTextStyles.headline(26, FontWeight.w700)),
-            const SizedBox(width: 4),
-            Text(unit, style: AppTextStyles.body(11, FontWeight.w400, AppColors.onSurfaceVariant)),
-          ],
+                .copyWith(letterSpacing: 1.2, fontWeight: FontWeight.w700),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: AppTextStyles.headline(22, FontWeight.w700),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+        Text(
+          unit,
+          style: AppTextStyles.body(10, FontWeight.w400, AppColors.onSurfaceVariant),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
       ],
     ),
   );
 }
 
+// ─── Distribution Card ──────────────────────────────────────────────────────────
 class _DistributionCard extends StatelessWidget {
   final Map<String, dynamic> byType;
   const _DistributionCard({required this.byType});
 
   static const _labels = ['PDF', 'IMAGE', 'DICOM', 'REPORT', 'OTHER'];
-  static const _colors = [AppColors.primary, AppColors.primaryFixedDim,
-      AppColors.tertiaryFixed, AppColors.tertiary, AppColors.surfaceContainerHigh];
+  static const _colors = [
+    AppColors.primary, AppColors.primaryFixedDim,
+    AppColors.tertiaryFixed, AppColors.tertiary,
+    AppColors.surfaceContainerHigh,
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final total = byType.values.fold<num>(0, (a, b) => a + (b as num));
+    final data = byType.isEmpty
+        ? {
+            'pdf':    1.0,
+            'image':  0.7,
+            'dicom':  0.5,
+            'report': 0.3,
+            'other':  0.2,
+          }
+        : Map<String, dynamic>.from(byType);
+
+    final total = data.values.fold<num>(0, (a, b) => a + (b as num));
+
     return _BaseCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Record Distribution', style: AppTextStyles.headline(18, FontWeight.w600)),
-          Text('Categorized by type', style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurfaceVariant)),
+          Text('Record Distribution',
+              style: AppTextStyles.headline(18, FontWeight.w600)),
+          Text('Categorized by type',
+              style: AppTextStyles.body(13, FontWeight.w400,
+                  AppColors.onSurfaceVariant)),
           const SizedBox(height: 24),
+          // Fixed height bar chart — use LayoutBuilder so bars scale correctly
           SizedBox(
             height: 160,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: byType.isEmpty
-                  ? _emptyBars()
-                  : byType.entries.toList().asMap().entries.map((e) {
-                      final pct = total > 0 ? (e.value.value as num) / total : 0.0;
-                      final color = _colors[e.key % _colors.length];
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Flexible(
-                                child: FractionallySizedBox(
-                                  heightFactor: pct.toDouble().clamp(0.05, 1.0),
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                                    ),
-                                  ),
+              children: data.entries.toList().asMap().entries.map((e) {
+                final pct =
+                    total > 0 ? (e.value.value as num) / total : 0.0;
+                final color = _colors[e.key % _colors.length];
+                final heightFactor = pct.toDouble().clamp(0.05, 1.0);
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: FractionallySizedBox(
+                              heightFactor: heightFactor,
+                              widthFactor: 1.0,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(6)),
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                e.value.key.toString().toUpperCase(),
-                                style: AppTextStyles.label(8, AppColors.onSurfaceVariant)
-                                    .copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                      );
-                    }).toList(),
+                        const SizedBox(height: 8),
+                        Text(
+                          e.value.key.toString().toUpperCase(),
+                          style: AppTextStyles.label(8,
+                                  AppColors.onSurfaceVariant)
+                              .copyWith(
+                                  letterSpacing: 0.8,
+                                  fontWeight: FontWeight.w700),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],
       ),
     );
   }
-
-  List<Widget> _emptyBars() => _labels.asMap().entries.map((e) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Flexible(
-            child: FractionallySizedBox(
-              heightFactor: [0.65, 0.45, 0.85, 0.30, 0.55][e.key],
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _colors[e.key % _colors.length],
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(e.value, style: AppTextStyles.label(8, AppColors.onSurfaceVariant)
-              .copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
-        ],
-      ),
-    ),
-  )).toList();
 }
 
+// ─── Recent Archives Card ───────────────────────────────────────────────────────
 class _RecentArchivesCard extends StatelessWidget {
   final List recent;
   const _RecentArchivesCard({required this.recent});
@@ -363,16 +398,20 @@ class _RecentArchivesCard extends StatelessWidget {
   Widget build(BuildContext context) => _BaseCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Recent Archives', style: AppTextStyles.headline(18, FontWeight.w600)),
+        Text('Recent Archives',
+            style: AppTextStyles.headline(18, FontWeight.w600)),
         const SizedBox(height: 20),
-        ...recent.take(4).map((f) => _RecentEntry(file: f)).toList(),
+        ...recent.take(4).map((f) =>
+            _RecentEntry(file: f is Map ? Map<String, dynamic>.from(f as Map) : f as Map<String, dynamic>)),
         if (recent.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Center(
               child: Text('No records yet',
-                  style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurfaceVariant)),
+                  style: AppTextStyles.body(13, FontWeight.w400,
+                      AppColors.onSurfaceVariant)),
             ),
           ),
         const SizedBox(height: 16),
@@ -380,13 +419,16 @@ class _RecentArchivesCard extends StatelessWidget {
           width: double.infinity,
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppColors.outlineVariant.withOpacity(0.3)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+              side: BorderSide(
+                  color: AppColors.outlineVariant.withOpacity(0.3)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.lg)),
               padding: const EdgeInsets.symmetric(vertical: 13),
             ),
             onPressed: () {},
             child: Text('View All Archives',
-                style: AppTextStyles.body(13, FontWeight.w600, AppColors.onSurfaceVariant)),
+                style: AppTextStyles.body(13, FontWeight.w600,
+                    AppColors.onSurfaceVariant)),
           ),
         ),
       ],
@@ -394,6 +436,7 @@ class _RecentArchivesCard extends StatelessWidget {
   );
 }
 
+// ─── Recent Entry ───────────────────────────────────────────────────────────────
 class _RecentEntry extends StatelessWidget {
   final Map<String, dynamic> file;
   const _RecentEntry({required this.file});
@@ -401,7 +444,8 @@ class _RecentEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = file['file_type'] ?? 'pdf';
-    final icon = type == 'image' ? Icons.image_outlined : Icons.description_outlined;
+    final icon =
+        type == 'image' ? Icons.image_outlined : Icons.description_outlined;
     final color = type == 'image' ? AppColors.tertiary : AppColors.primary;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -417,14 +461,19 @@ class _RecentEntry extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(file['ai_name'] ?? file['original_name'] ?? 'Unknown',
-                    style: AppTextStyles.body(12, FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  file['ai_name'] ?? file['original_name'] ?? 'Unknown',
+                  style: AppTextStyles.body(12, FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
                 Text(file['file_type'] ?? '',
-                    style: AppTextStyles.label(10, AppColors.onSurfaceVariant)),
+                    style:
+                        AppTextStyles.label(10, AppColors.onSurfaceVariant)),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(_ago(file['uploaded_at']),
               style: AppTextStyles.label(9, AppColors.onSurfaceVariant)),
         ],
@@ -443,7 +492,10 @@ class _RecentEntry extends StatelessWidget {
   }
 }
 
+// ─── Clinical Insights Section ──────────────────────────────────────────────────
 class _ClinicalInsightsSection extends StatelessWidget {
+  const _ClinicalInsightsSection();
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -451,99 +503,154 @@ class _ClinicalInsightsSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('Clinical Insights', style: AppTextStyles.headline(22, FontWeight.w700)),
+            Text('Clinical Insights',
+                style: AppTextStyles.headline(22, FontWeight.w700)),
             const SizedBox(width: 16),
-            Expanded(child: Divider(color: AppColors.outlineVariant.withOpacity(0.15))),
+            Expanded(
+                child: Divider(
+                    color: AppColors.outlineVariant.withOpacity(0.15))),
           ],
         ),
         const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppColors.tertiaryFixed.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: AppColors.tertiaryFixed.withOpacity(0.6)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.priority_high, color: AppColors.tertiary),
-                    const SizedBox(height: 12),
-                    Text('Annual Screen Pending',
-                        style: AppTextStyles.headline(14, FontWeight.w700, AppColors.onTertiaryFixedVar)),
-                    const SizedBox(height: 6),
-                    Text('Your metabolic profile requires an update. Schedule your panel to maintain precision tracking.',
-                        style: AppTextStyles.body(12, FontWeight.w400, AppColors.onTertiaryFixedVar)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _BaseCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Medication Adherence', style: AppTextStyles.headline(14, FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    Text('All treatments are synchronized with your biometric data.',
-                        style: AppTextStyles.body(12, FontWeight.w400, AppColors.onSurfaceVariant)),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 16),
-                          const SizedBox(width: 8),
-                          Text('Stable Baseline',
-                              style: AppTextStyles.body(12, FontWeight.w700, AppColors.primary)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _BaseCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.shield_outlined, color: AppColors.primary, size: 32),
-                    const SizedBox(height: 12),
-                    Text('Secure Vault', style: AppTextStyles.headline(14, FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    Text('Your data is encrypted with 256-bit clinical-grade security.',
-                        style: AppTextStyles.body(12, FontWeight.w400, AppColors.onSurfaceVariant)),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Text('Manage Encryption',
-                            style: AppTextStyles.body(11, FontWeight.w700, AppColors.primary)),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        // Use Wrap so cards reflow on narrow screens
+        LayoutBuilder(builder: (context, constraints) {
+          // On wide screens use Row; on narrow use Column
+          final wide = constraints.maxWidth > 600;
+          final cards = [
+            _InsightAlert(),
+            const SizedBox(width: 20, height: 20),
+            _InsightMeds(),
+            const SizedBox(width: 20, height: 20),
+            _InsightSecurity(),
+          ];
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _InsightAlert()),
+                const SizedBox(width: 20),
+                Expanded(child: _InsightMeds()),
+                const SizedBox(width: 20),
+                Expanded(child: _InsightSecurity()),
+              ],
+            );
+          } else {
+            return Column(
+              children: [
+                _InsightAlert(),
+                const SizedBox(height: 16),
+                _InsightMeds(),
+                const SizedBox(height: 16),
+                _InsightSecurity(),
+              ],
+            );
+          }
+        }),
       ],
     );
   }
 }
 
-// ─── Shared base card ──────────────────────────────────────────────────────────
+class _InsightAlert extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: AppColors.tertiaryFixed.withOpacity(0.3),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      border:
+          Border.all(color: AppColors.tertiaryFixed.withOpacity(0.6)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.priority_high, color: AppColors.tertiary),
+        const SizedBox(height: 12),
+        Text('Annual Screen Pending',
+            style: AppTextStyles.headline(
+                14, FontWeight.w700, AppColors.onTertiaryFixedVar)),
+        const SizedBox(height: 6),
+        Text(
+          'Your metabolic profile requires an update. Schedule your panel to maintain precision tracking.',
+          style: AppTextStyles.body(
+              12, FontWeight.w400, AppColors.onTertiaryFixedVar),
+        ),
+      ],
+    ),
+  );
+}
+
+class _InsightMeds extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => _BaseCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Medication Adherence',
+            style: AppTextStyles.headline(14, FontWeight.w700)),
+        const SizedBox(height: 8),
+        Text('All treatments are synchronized with your biometric data.',
+            style: AppTextStyles.body(
+                12, FontWeight.w400, AppColors.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_outline,
+                  color: AppColors.primary, size: 16),
+              const SizedBox(width: 8),
+              Text('Stable Baseline',
+                  style: AppTextStyles.body(
+                      12, FontWeight.w700, AppColors.primary)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _InsightSecurity extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => _BaseCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.shield_outlined, color: AppColors.primary, size: 32),
+        const SizedBox(height: 12),
+        Text('Secure Vault',
+            style: AppTextStyles.headline(14, FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(
+          'Your data is encrypted with 256-bit clinical-grade security.',
+          style: AppTextStyles.body(
+              12, FontWeight.w400, AppColors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Manage Encryption',
+                style: AppTextStyles.body(11, FontWeight.w700, AppColors.primary)),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+// ─── Shared base card ───────────────────────────────────────────────────────────
 class _BaseCard extends StatelessWidget {
   final Widget child;
   const _BaseCard({required this.child});
@@ -557,8 +664,9 @@ class _BaseCard extends StatelessWidget {
       boxShadow: [
         BoxShadow(
           color: AppColors.onSurface.withOpacity(0.04),
-          blurRadius: 24, offset: const Offset(0, 4),
-        )
+          blurRadius: 24,
+          offset: const Offset(0, 4),
+        ),
       ],
     ),
     child: child,

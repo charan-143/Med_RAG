@@ -32,12 +32,17 @@ class FolderCreate(BaseModel):
     name: str
     icon: str = "folder"
 
+class FolderUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+
 class FolderOut(BaseModel):
     id: str
     name: str
     icon: str
     created_at: str
     file_count: int = 0
+    ai_summary: Optional[str] = None
 
 class FileOut(BaseModel):
     id: str

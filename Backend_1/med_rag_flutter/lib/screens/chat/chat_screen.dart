@@ -18,6 +18,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> _contextFiles = [];
   List<Map<String, dynamic>> _contextFolders = [];
   bool _sending = false;
+  bool _historyVisible = false;
 
   @override
   void initState() {
@@ -29,7 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final hist = await ApiService.getChatHistory();
       if (mounted) setState(() {
-        _messages = hist.cast<Map<String, dynamic>>();
+        _messages = hist.map((e) => e as Map<String, dynamic>).toList();
       });
       _scrollToBottom();
     } catch (_) {}
@@ -91,25 +92,30 @@ class _ChatScreenState extends State<ChatScreen> {
     final files = await ApiService.getFiles();
     final folders = await ApiService.getFolders();
     if (!mounted) return;
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: AppColors.surfaceContainerLowest,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (_) => _VaultPickerSheet(
-        files: files.cast<Map<String, dynamic>>(),
-        folders: folders.cast<Map<String, dynamic>>(),
-        selectedFileIds: _contextFileIds,
-        selectedFolderIds: _contextFolderIds,
-        onDone: (fids, folids, fObjs, folObjs) {
-          setState(() {
-            _contextFileIds = fids;
-            _contextFolderIds = folids;
-            _contextFiles = fObjs;
-            _contextFolders = folObjs;
-          });
-        },
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+          child: _VaultPickerSheet(
+            files: files.map((e) => e as Map<String, dynamic>).toList(),
+            folders: folders.map((e) => e as Map<String, dynamic>).toList(),
+            selectedFileIds: _contextFileIds,
+            selectedFolderIds: _contextFolderIds,
+            onDone: (fids, folids, fObjs, folObjs) {
+              setState(() {
+                _contextFileIds = fids;
+                _contextFolderIds = folids;
+                _contextFiles = fObjs;
+                _contextFolders = folObjs;
+              });
+            },
+          ),
+        ),
       ),
     );
   }
@@ -125,85 +131,185 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // History group for side panel
+    final userMessages = _messages.where((m) => m['role'] == 'user').toList().reversed.toList();
+
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          // ── Header ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-            child: Row(
+          // ── Main Chat Area ──
+          Column(
               children: [
+                // ── Header ──
                 Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.tertiaryFixed,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.tertiaryFixed,
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                        ),
+                        child: const Icon(Icons.smart_toy_outlined,
+                            color: AppColors.onTertiaryFixedVar, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('AI Clinical Assistant',
+                              style: AppTextStyles.headline(18, FontWeight.w700)),
+                          Row(
+                            children: [
+                              Container(width: 8, height: 8, decoration: const BoxDecoration(
+                                color: Colors.green, shape: BoxShape.circle)),
+                              const SizedBox(width: 6),
+                              Text('Neural Engine Active',
+                                  style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.history, color: AppColors.onSurfaceVariant),
+                        tooltip: 'Toggle History',
+                        onPressed: () => setState(() => _historyVisible = !_historyVisible),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_sweep_outlined, color: AppColors.onSurfaceVariant),
+                        tooltip: 'Clear chat',
+                        onPressed: () => setState(() => _messages.clear()),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.smart_toy_outlined,
-                      color: AppColors.onTertiaryFixedVar, size: 22),
                 ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('AI Clinical Assistant',
-                        style: AppTextStyles.headline(18, FontWeight.w700)),
-                    Row(
-                      children: [
-                        Container(width: 8, height: 8, decoration: const BoxDecoration(
-                          color: Colors.green, shape: BoxShape.circle)),
-                        const SizedBox(width: 6),
-                        Text('Neural Engine Active',
-                            style: AppTextStyles.label(11, AppColors.onSurfaceVariant)),
-                      ],
-                    ),
-                  ],
+
+                // ── Messages ──
+                Expanded(
+                  child: _messages.isEmpty
+                      ? _EmptyChatState()
+                      : ListView.builder(
+                          controller: _scrollCtrl,
+                          padding: const EdgeInsets.fromLTRB(40, 8, 40, 8),
+                          itemCount: _messages.length + (_sending ? 1 : 0),
+                          itemBuilder: (_, i) {
+                            if (_sending && i == _messages.length) {
+                              return const _TypingIndicator();
+                            }
+                            return _ChatBubble(message: _messages[i]);
+                          },
+                        ),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_outlined, color: AppColors.onSurfaceVariant),
-                  tooltip: 'Clear chat',
-                  onPressed: () => setState(() => _messages.clear()),
+
+                // ── Input Area ──
+                _ChatInput(
+                  controller: _msgCtrl,
+                  contextFiles: _contextFiles,
+                  contextFolders: _contextFolders,
+                  onSend: _send,
+                  onAttach: _attachFile,
+                  onVaultPick: _showVaultPicker,
+                  onRemoveFile: (id) => setState(() {
+                    _contextFileIds.remove(id);
+                    _contextFiles.removeWhere((f) => f['id'] == id);
+                  }),
+                  onRemoveFolder: (id) => setState(() {
+                    _contextFolderIds.remove(id);
+                    _contextFolders.removeWhere((f) => f['id'] == id);
+                  }),
                 ),
               ],
             ),
-          ),
-
-          // ── Messages ──
-          Expanded(
-            child: _messages.isEmpty
-                ? _EmptyChatState()
-                : ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(40, 8, 40, 8),
-                    itemCount: _messages.length + (_sending ? 1 : 0),
-                    itemBuilder: (_, i) {
-                      if (_sending && i == _messages.length) {
-                        return const _TypingIndicator();
-                      }
-                      return _ChatBubble(message: _messages[i]);
-                    },
+          // ── Conversation History Sidebar (right) ──
+          if (_historyVisible) ...[
+            // Scrim
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _historyVisible = false),
+                child: Container(color: Colors.black.withOpacity(0.15)),
+              ),
+            ),
+            // Floating Sidebar
+            Positioned(
+              right: 0, top: 0, bottom: 0,
+              child: Material(
+                elevation: 16,
+                child: Container(
+                  width: 320,
+                  color: AppColors.surfaceContainerLowest.withOpacity(0.95),
+                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.history, color: AppColors.primary, size: 22),
+                          const SizedBox(width: 8),
+                          Text('Conversation History',
+                              style: AppTextStyles.headline(16, FontWeight.w700)),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => setState(() => _historyVisible = false),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Expanded(
+                        child: userMessages.isEmpty
+                            ? Center(
+                                child: Text('No previous conversations.',
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.body(13, FontWeight.w400,
+                                        AppColors.onSurfaceVariant)),
+                              )
+                            : ListView.builder(
+                                itemCount: userMessages.length,
+                                itemBuilder: (_, i) {
+                                  final msg = userMessages[i];
+                                  final time = (msg['created_at'] ?? '').toString();
+                                  final dateStr = time.length >= 10 ? time.substring(0, 10) : '';
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceContainerHigh.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                                      border: Border.all(color: AppColors.outlineVariant.withOpacity(0.15)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          msg['content'] ?? '',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTextStyles.body(13, FontWeight.w600),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.chat_bubble_outline, size: 12, color: AppColors.onSurfaceVariant),
+                                            const SizedBox(width: 4),
+                                            Text(dateStr, style: AppTextStyles.label(10, AppColors.onSurfaceVariant)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
                   ),
-          ),
-
-          // ── Input Area ──
-          _ChatInput(
-            controller: _msgCtrl,
-            contextFiles: _contextFiles,
-            contextFolders: _contextFolders,
-            onSend: _send,
-            onAttach: _attachFile,
-            onVaultPick: _showVaultPicker,
-            onRemoveFile: (id) => setState(() {
-              _contextFileIds.remove(id);
-              _contextFiles.removeWhere((f) => f['id'] == id);
-            }),
-            onRemoveFolder: (id) => setState(() {
-              _contextFolderIds.remove(id);
-              _contextFolders.removeWhere((f) => f['id'] == id);
-            }),
-          ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -385,105 +491,108 @@ class _ChatInput extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasContext = contextFiles.isNotEmpty || contextFolders.isNotEmpty;
     return Container(
-      padding: const EdgeInsets.fromLTRB(40, 8, 40, 28),
-      child: Column(
-        children: [
-          // Context tags
-          if (hasContext)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Wrap(
-                spacing: 8, runSpacing: 6,
-                children: [
-                  ...contextFiles.map((f) => _ContextTag(
-                    label: f['ai_name'] ?? 'File',
-                    icon: Icons.description_outlined,
-                    color: AppColors.primary,
-                    onRemove: () => onRemoveFile(f['id']),
-                  )),
-                  ...contextFolders.map((f) => _ContextTag(
-                    label: f['name'] ?? 'Folder',
-                    icon: Icons.folder_outlined,
-                    color: AppColors.tertiary,
-                    onRemove: () => onRemoveFolder(f['id']),
-                  )),
-                ],
-              ),
-            ),
-          // Input box
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(AppRadius.xl + 8),
-              border: Border.all(color: AppColors.outlineVariant.withOpacity(0.2)),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 24, offset: const Offset(0, 8))
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Vault picker
-                _RoundBtn(icon: Icons.folder_open_outlined, onTap: onVaultPick),
-                const SizedBox(width: 6),
-                // Text input
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    maxLines: 4,
-                    minLines: 1,
-                    decoration: const InputDecoration.collapsed(
-                        hintText: 'Ask anything or refer to a Vault file...'),
-                    style: AppTextStyles.body(14),
-                    onSubmitted: (_) => onSend(),
-                    textInputAction: TextInputAction.newline,
+      padding: const EdgeInsets.fromLTRB(40, 16, 40, 32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Context tags
+              if (hasContext)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12, left: 16),
+                  child: Wrap(
+                    spacing: 8, runSpacing: 6,
+                    children: [
+                      ...contextFiles.map((f) => _ContextTag(
+                        label: f['ai_name'] ?? 'File',
+                        icon: Icons.description_outlined,
+                        color: AppColors.primary,
+                        onRemove: () => onRemoveFile(f['id']),
+                      )),
+                      ...contextFolders.map((f) => _ContextTag(
+                        label: f['name'] ?? 'Folder',
+                        icon: Icons.folder_outlined,
+                        color: AppColors.tertiary,
+                        onRemove: () => onRemoveFolder(f['id']),
+                      )),
+                    ],
                   ),
                 ),
-                // Attach + Send
-                _RoundBtn(icon: Icons.attach_file, onTap: onAttach),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: onSend,
-                  child: Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryContainer],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+              // Input box
+              Container(
+                padding: const EdgeInsets.only(left: 16, right: 8, top: 6, bottom: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16, offset: const Offset(0, 4))
+                  ],
+                  border: Border.all(color: AppColors.outlineVariant.withOpacity(0.1)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Vault picker
+                    _MinimalBtn(icon: Icons.folder_open_outlined, onTap: onVaultPick),
+                    const SizedBox(width: 4),
+                    // Attach
+                    _MinimalBtn(icon: Icons.attach_file, onTap: onAttach),
+                    const SizedBox(width: 12),
+                    // Text input
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration.collapsed(
+                            hintText: 'Type your message...',
+                        ),
+                        style: AppTextStyles.body(14),
+                        onSubmitted: (_) => onSend(),
+                        textInputAction: TextInputAction.send,
                       ),
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                      boxShadow: [
-                        BoxShadow(color: AppColors.primary.withOpacity(0.3),
-                            blurRadius: 12, offset: const Offset(0, 4))
-                      ],
                     ),
-                    child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                  ),
+                    const SizedBox(width: 12),
+                    // Send
+                    GestureDetector(
+                      onTap: onSend,
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_upward, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Text('AI responses can make mistakes. Verify important clinical information.',
+                    style: AppTextStyles.label(10, AppColors.onSurfaceVariant.withOpacity(0.6))),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _RoundBtn extends StatelessWidget {
+class _MinimalBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _RoundBtn({required this.icon, required this.onTap});
+  const _MinimalBtn({required this.icon, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surfaceContainerHigh,
-    shape: const CircleBorder(),
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: onTap,
-      child: SizedBox(width: 44, height: 44,
-          child: Icon(icon, size: 20, color: AppColors.onSurfaceVariant)),
+  Widget build(BuildContext context) => InkWell(
+    customBorder: const CircleBorder(),
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Icon(icon, size: 20, color: AppColors.onSurfaceVariant.withOpacity(0.8)),
     ),
   );
 }
@@ -549,11 +658,7 @@ class _VaultPickerSheetState extends State<_VaultPickerSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
-    expand: false,
-    initialChildSize: 0.6,
-    maxChildSize: 0.9,
-    builder: (_, ctrl) => Column(
+  Widget build(BuildContext context) => Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -577,7 +682,6 @@ class _VaultPickerSheetState extends State<_VaultPickerSheet> {
         ),
         Expanded(
           child: ListView(
-            controller: ctrl,
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
               if (widget.folders.isNotEmpty) ...[
@@ -623,8 +727,7 @@ class _VaultPickerSheetState extends State<_VaultPickerSheet> {
           ),
         ),
       ],
-    ),
-  );
+    );
 }
 
 class _EmptyChatState extends StatelessWidget {
