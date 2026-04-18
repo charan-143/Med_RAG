@@ -78,7 +78,7 @@ async def chat_endpoint(
                 context_items.append(f"- {cf['original_name']}: {summary_snippet}")
         
         if context_items:
-            context_block = "The user has provided the following documents for context:\n" + "\n".join(context_items)
+            context_block = "User context:\nThe user has provided the following documents for context:\n" + "\n".join(context_items)
             final_prompt = f"{context_block}\n\nUser Question: {message}"
 
     try:
