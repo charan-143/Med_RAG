@@ -13,7 +13,7 @@ from agno.team import Team
 from api.dependencies import get_medical_team_router
 from models.api_models import ChatResponse, ChatMessage
 from services.image_processor import prepare_image
-from db.sqlite_db import save_chat_message, list_chat_history, list_files
+from db.sqlite_db import save_chat_message, list_chat_history, list_files, get_file
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -67,12 +67,26 @@ async def chat_endpoint(
         context_ids=",".join(context_ids),
     )
 
+    # Prepend context from selected files to the prompt
+    final_prompt = message
+    if context_ids:
+        context_items = []
+        for cid in context_ids:
+            cf = get_file(cid)
+            if cf:
+                summary_snippet = cf.get("ai_summary") or "No summary available."
+                context_items.append(f"- {cf['original_name']}: {summary_snippet}")
+        
+        if context_items:
+            context_block = "User context:\nThe user has provided the following documents for context:\n" + "\n".join(context_items)
+            final_prompt = f"{context_block}\n\nUser Question: {message}"
+
     try:
         # agno Team.run() — same signature as Agent.run() for images
         if images_to_process:
-            result = team.run(message, images=images_to_process)
+            result = team.run(final_prompt, images=images_to_process)
         else:
-            result = team.run(message)
+            result = team.run(final_prompt)
 
         # TeamRunOutput exposes .content (str | list)
         ai_content = result.content

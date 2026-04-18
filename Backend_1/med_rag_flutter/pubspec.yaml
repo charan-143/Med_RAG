@@ -20,8 +20,8 @@ dependencies:
   # UI Utilities
   google_fonts: ^6.2.1
   
-  # File picking
-  file_picker: ^8.0.5
+  # File picking (pinned to last version without objective_c native hook)
+  file_picker: ^6.2.1
   
   # Misc
   intl: ^0.19.0
@@ -32,6 +32,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+
+# Prevents objective_c's build hook from running on Windows
+# (breaks on paths with spaces in username)
+dependency_overrides:
+  objective_c: ^5.0.0
 
 flutter:
   uses-material-design: true

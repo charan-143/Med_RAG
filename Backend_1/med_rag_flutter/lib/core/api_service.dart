@@ -6,18 +6,36 @@ import 'package:http_parser/http_parser.dart';
 class ApiService {
   static const String _base = 'http://127.0.0.1:8000/api';
 
+  // ─── Helpers (type-safe deep cast) ───────────────────────────────────────
+  static Map<String, dynamic> _deepCastMap(dynamic raw) {
+    final map = raw as Map;
+    return map.map((k, v) {
+      if (v is Map) return MapEntry(k.toString(), _deepCastMap(v));
+      if (v is List) return MapEntry(k.toString(), _deepCastList(v));
+      return MapEntry(k.toString(), v);
+    });
+  }
+
+  static List<dynamic> _deepCastList(dynamic raw) {
+    return (raw as List).map((e) {
+      if (e is Map) return _deepCastMap(e);
+      if (e is List) return _deepCastList(e);
+      return e;
+    }).toList();
+  }
+
   // ─── Overview ─────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getOverviewStats() async {
     final res = await http.get(Uri.parse('$_base/overview/stats'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   // ─── Folders ──────────────────────────────────────────────────────────────
   static Future<List<dynamic>> getFolders() async {
     final res = await http.get(Uri.parse('$_base/folders'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastList(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> createFolder(String name, {String icon = 'folder'}) async {
@@ -27,7 +45,26 @@ class ApiService {
       body: jsonEncode({'name': name, 'icon': icon}),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
+  }
+
+  static Future<Map<String, dynamic>> updateFolder(String folderId, {String? name, String? icon}) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (icon != null) body['icon'] = icon;
+    
+    final res = await http.put(
+      Uri.parse('$_base/folders/$folderId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _check(res);
+    return _deepCastMap(jsonDecode(res.body));
+  }
+  static Future<Map<String, dynamic>> summarizeFolder(String folderId) async {
+    final res = await http.post(Uri.parse('$_base/folders/$folderId/summarize'));
+    _check(res);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static Future<void> deleteFolder(String folderId) async {
@@ -42,16 +79,21 @@ class ApiService {
         : '$_base/files';
     final res = await http.get(Uri.parse(url));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastList(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> getFileDetail(String fileId) async {
     final res = await http.get(Uri.parse('$_base/files/$fileId'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static String getFilePreviewUrl(String fileId) => '$_base/files/$fileId/preview';
+  static Future<Map<String, dynamic>> summarizeFile(String fileId) async {
+    final res = await http.post(Uri.parse('$_base/files/$fileId/summarize'));
+    _check(res);
+    return _deepCastMap(jsonDecode(res.body));
+  }
 
   static Future<void> deleteFile(String fileId) async {
     final res = await http.delete(Uri.parse('$_base/files/$fileId'));
@@ -65,7 +107,7 @@ class ApiService {
       body: jsonEncode({'folder_id': folderId}),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> uploadFile(
@@ -88,14 +130,14 @@ class ApiService {
     final streamed = await req.send();
     final res = await http.Response.fromStream(streamed);
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   // ─── Chat ─────────────────────────────────────────────────────────────────
   static Future<List<dynamic>> getChatHistory({int limit = 50}) async {
     final res = await http.get(Uri.parse('$_base/chat/history?limit=$limit'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastList(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> sendChat(
@@ -121,14 +163,14 @@ class ApiService {
     final streamed = await req.send();
     final res = await http.Response.fromStream(streamed);
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   // ─── Notes ────────────────────────────────────────────────────────────────
   static Future<List<dynamic>> getNotes() async {
     final res = await http.get(Uri.parse('$_base/notes'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastList(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> createNote({
@@ -143,7 +185,7 @@ class ApiService {
       body: jsonEncode({'title': title, 'content': content, 'tags': tags, 'source': source}),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> updateNote(
@@ -165,7 +207,7 @@ class ApiService {
       body: jsonEncode(body),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static Future<void> deleteNote(String noteId) async {
@@ -188,14 +230,14 @@ class ApiService {
       }),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   // ─── Profile ──────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getProfile() async {
     final res = await http.get(Uri.parse('$_base/profile'));
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
@@ -205,7 +247,7 @@ class ApiService {
       body: jsonEncode(data),
     );
     _check(res);
-    return jsonDecode(res.body);
+    return _deepCastMap(jsonDecode(res.body));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

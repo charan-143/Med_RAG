@@ -10,17 +10,20 @@ import uuid
 import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Query
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Query, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from typing import Optional
 
+from agno.team import Team
+from api.dependencies import get_medical_team_router
+
 from db.sqlite_db import (
     insert_file, get_file, list_files, delete_file_record, update_file_ai,
-    list_folders, create_folder, delete_folder, get_folder_file_count,
-    get_overview_stats
+    list_folders, create_folder, update_folder, delete_folder, get_folder_file_count,
+    get_overview_stats, update_folder_ai
 )
 from models.api_models import (
-    UploadResponse, FileOut, FolderOut, FolderCreate, OverviewStats, FileMoveRequest
+    UploadResponse, FileOut, FolderOut, FolderCreate, FolderUpdate, OverviewStats, FileMoveRequest
 )
 from services.document_parser import load_documents_to_db
 
@@ -76,9 +79,45 @@ async def add_folder(body: FolderCreate):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.put("/folders/{folder_id}", response_model=FolderOut)
+async def edit_folder(folder_id: str, body: FolderUpdate):
+    try:
+        folder = update_folder(folder_id, name=body.name, icon=body.icon)
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+        return FolderOut(**folder, file_count=get_folder_file_count(folder_id))
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.delete("/folders/{folder_id}", status_code=204)
 async def remove_folder(folder_id: str):
     delete_folder(folder_id)
+
+@router.post("/folders/{folder_id}/summarize", response_model=FolderOut)
+async def summarize_folder(folder_id: str, team: Team = Depends(get_medical_team_router)):
+    conn_folder = update_folder(folder_id)
+    if not conn_folder:
+        raise HTTPException(404, "Folder not found")
+        
+    files = list_files(folder_id)
+    if not files:
+        summary = "This folder is empty."
+    else:
+        file_list_str = "\n".join(f"- {f['original_name']} ({f.get('file_type', 'unknown')})" for f in files)
+        prompt = f"Please provide a concise medical summary (2-3 sentences) of the patient portfolio given these file contents/types within this folder:\n{file_list_str}"
+        try:
+            result = team.run(prompt)
+            summary = result.content
+            if isinstance(summary, list):
+                summary = "\n".join(str(block.text if hasattr(block, "text") else block) for block in summary)
+        except Exception as e:
+            summary = "Summary generation failed."
+
+    update_folder_ai(folder_id, ai_summary=summary)
+    conn_folder["ai_summary"] = summary
+    return FolderOut(**conn_folder, file_count=len(files))
 
 
 # ─── Files ──────────────────────────────────────────────────────────────────────
@@ -126,11 +165,58 @@ async def delete_file(file_id: str):
             os.remove(disk_path)
 
 
+async def _run_summarization_logic(file_id: str, team: Team):
+    """Helper to generate and store AI summary for a specific file."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    f = get_file(file_id)
+    if not f:
+        return
+        
+    try:
+        from services.image_processor import prepare_image
+        images_to_process = []
+        if f["file_type"] == "image":
+            disk_path = os.path.join(UPLOAD_DIR, f["safe_name"])
+            if os.path.exists(disk_path):
+                images_to_process.append(prepare_image(disk_path))
+            prompt = "Please provide a concise medical interpretation of this image in 2-4 sentences."
+        else:
+            prompt = f"Please provide a concise medical summary of the document named '{f['original_name']}'. Summarize key points in 2-4 sentences."
+            
+        if images_to_process:
+            result = team.run(prompt, images=images_to_process)
+        else:
+            result = team.run(prompt)
+            
+        summary = result.content
+        if not summary:
+            summary = "The AI was unable to generate a summary for this file type."
+        elif isinstance(summary, list):
+            summary = "\n".join(str(block.text if hasattr(block, "text") else block) for block in summary)
+            
+    except Exception as e:
+        logger.error(f"Gemini summarization failed for {file_id}: {e}")
+        summary = "AI Overview is currently unavailable for this document. (Transient error or unreadable content)"
+
+    update_file_ai(file_id, ai_summary=summary)
+
+@router.post("/files/{file_id}/summarize", response_model=FileOut)
+async def summarize_file(file_id: str, team: Team = Depends(get_medical_team_router)):
+    await _run_summarization_logic(file_id, team)
+    f = get_file(file_id)
+    if not f:
+        raise HTTPException(404, "File not found")
+    return FileOut(**f)
+
 # ─── Upload ──────────────────────────────────────────────────────────────────────
 @router.post("/upload", response_model=UploadResponse, status_code=201)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     folder_id: Optional[str] = Form(None),
+    team: Team = Depends(get_medical_team_router),
 ):
     if not file.filename:
         raise HTTPException(400, "No file uploaded")
@@ -157,7 +243,7 @@ async def upload_document(
         import logging
         try:
             with _pdf_lock:
-                await asyncio.to_thread(load_documents_to_db, disk_path)
+                await asyncio.to_thread(load_documents_to_db, disk_path, file.filename)
         except Exception as e:
             logging.getLogger(__name__).exception("PDF vectorization failed:")
 
@@ -171,6 +257,9 @@ async def upload_document(
         folder_id=folder_id,
         ai_name=ai_name,
     )
+
+    # Trigger background summarization
+    background_tasks.add_task(_run_summarization_logic, record["id"], team)
 
     return UploadResponse(
         message=f"{file.filename} uploaded successfully.",

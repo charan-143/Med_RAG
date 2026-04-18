@@ -24,7 +24,7 @@ def create_base_medical_agent(
     return Agent(
         name=name,
         role=role,
-        model=Gemini(id="gemini-2.5-flash", api_key=settings.GOOGLE_API_KEY),
+        model=Gemini(id="gemma-4-31b-it", api_key=settings.GOOGLE_API_KEY),
         knowledge=knowledge_base,
         search_knowledge=True if knowledge_base else False,
         markdown=True,

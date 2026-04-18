@@ -11,8 +11,9 @@ clinical_analyst = create_base_medical_agent(
     name="Clinical Records Analyst",
     role="Expert at retrieving patient data from PDF documents and summarizing clinical context.",
     instructions=[
-        "You MUST ALWAYS call `search_knowledge_base` to retrieve relevant document chunks before answering.",
-        "Ground your answers STRICTLY in the retrieved text context."
+        "First, check the 'User context' provided in the prompt for a list of specific documents and their summaries.",
+        "Then, you MUST call `search_knowledge_base` to retrieve deeper context from the indexed text parts of those specific documents.",
+        "Ground your answers STRICTLY in the provided summaries AND the retrieved text chunks.",
     ],
     knowledge_base=pdf_knowledge_base
 )
@@ -33,7 +34,7 @@ radiologist = create_base_medical_agent(
 medical_team_agent = Team(
     name="Medical Supervisor System",
     members=[clinical_analyst, radiologist],
-    model=Gemini(id="gemini-2.0-flash", api_key=settings.GOOGLE_API_KEY),
+    model=Gemini(id="gemma-4-31b-it", api_key=settings.GOOGLE_API_KEY),
     instructions=[
         "You are the orchestrating supervisor for a world-class diagnostic clinic team.",
         "If the user uploaded an image, heavily delegate the visual inquiry to the Radiologist Expert.",
