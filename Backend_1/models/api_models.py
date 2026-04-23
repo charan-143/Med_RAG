@@ -17,6 +17,19 @@ class ChatMessage(BaseModel):
     context_ids: str = ""
     created_at: str
 
+class ChatSessionOut(BaseModel):
+    id: str
+    title: str
+    is_pinned: bool = False
+    is_archived: bool = False
+    created_at: str
+    updated_at: str
+
+class ChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
+    is_archived: Optional[bool] = None
+
 
 # ─── Upload ─────────────────────────────────────────────────────────────────────
 class UploadResponse(BaseModel):

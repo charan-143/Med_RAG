@@ -5,7 +5,6 @@ Clinical Atelier — FastAPI application entry point.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from api.routes_vault    import router as vault_router
 from api.routes_chat     import router as chat_router
@@ -43,5 +42,4 @@ app.include_router(chat_router,     prefix="/api")
 app.include_router(notebook_router, prefix="/api")
 app.include_router(profile_router,  prefix="/api")
 
-# ── Legacy HTML frontend (served at /) ────────────────────────────────────────
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+

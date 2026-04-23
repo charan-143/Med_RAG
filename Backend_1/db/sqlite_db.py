@@ -58,12 +58,14 @@ def init_db():
                 updated_at  TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS chat_history (
+            DROP TABLE IF EXISTS chat_history;
+            CREATE TABLE IF NOT EXISTS chat_sessions (
                 id          TEXT PRIMARY KEY,
-                role        TEXT NOT NULL,
-                content     TEXT NOT NULL,
-                context_ids TEXT DEFAULT '',
-                created_at  TEXT NOT NULL
+                title       TEXT NOT NULL,
+                is_pinned   INTEGER DEFAULT 0,
+                is_archived INTEGER DEFAULT 0,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS profile (
@@ -112,10 +114,23 @@ def init_db():
                 VALUES ('default','Julian Thorne','1985-05-24','Male','A+',
                     '+1 (555) 012-3344','j.thorne@atelier.care','BlueShield Premium Elite',?)
             """, (now,))
-        try:
+        # Run migrations safely
+        cols_query = conn.execute("PRAGMA table_info('folders')")
+        folder_cols = [row["name"] for row in cols_query.fetchall()]
+        if "ai_summary" not in folder_cols:
             conn.execute("ALTER TABLE folders ADD COLUMN ai_summary TEXT;")
-        except sqlite3.OperationalError:
-            pass
+        
+        # Migration for chat_sessions
+        cur = conn.execute("PRAGMA table_info('chat_sessions')")
+        chat_cols = [row["name"] for row in cur.fetchall()]
+        if "updated_at" not in chat_cols:
+            conn.execute("ALTER TABLE chat_sessions ADD COLUMN updated_at TEXT;")
+            conn.execute("UPDATE chat_sessions SET updated_at = created_at WHERE updated_at IS NULL")
+        if "is_pinned" not in chat_cols:
+            conn.execute("ALTER TABLE chat_sessions ADD COLUMN is_pinned INTEGER DEFAULT 0;")
+        if "is_archived" not in chat_cols:
+            conn.execute("ALTER TABLE chat_sessions ADD COLUMN is_archived INTEGER DEFAULT 0;")
+            
         conn.commit()
 
 
@@ -151,8 +166,12 @@ def update_folder(folder_id: str, name: str = None, icon: str = None) -> dict | 
 
         vals.append(folder_id)
         set_clause = ", ".join(updates)
-        conn.execute(f"UPDATE folders SET {set_clause} WHERE id=?", vals)
-        conn.commit()
+        try:
+            conn.execute(f"UPDATE folders SET {set_clause} WHERE id=?", vals)
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            conn.rollback()
+            raise ValueError("folder name already exists") from e
         r = conn.execute("SELECT * FROM folders WHERE id=?", (folder_id,)).fetchone()
         return dict(r) if r else None
 
@@ -292,25 +311,58 @@ def delete_note(note_id: str) -> bool:
         return True
 
 
-# ─── Chat history helpers ───────────────────────────────────────────────────────
-def save_chat_message(role: str, content: str, context_ids: str = "") -> dict:
+# ─── Chat Sessions ─────────────────────────────────────────────────────────────
+def create_chat_session(session_id: str, title: str):
+    """Register a new chat session to map to Agno's native storage."""
     with get_conn() as conn:
-        mid = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         conn.execute(
-            "INSERT INTO chat_history(id,role,content,context_ids,created_at) VALUES(?,?,?,?,?)",
-            (mid, role, content, context_ids, now)
+            "INSERT INTO chat_sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (session_id, title, now, now)
         )
         conn.commit()
-        return {"id": mid, "role": role, "content": content,
-                "context_ids": context_ids, "created_at": now}
 
-def list_chat_history(limit: int = 50) -> list:
+def list_chat_sessions() -> list[dict]:
+    """Return all chat sessions sorted by pinned first, then newest."""
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM chat_history ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-        return list(reversed([dict(r) for r in rows]))
+        cur = conn.execute(
+            "SELECT * FROM chat_sessions ORDER BY is_pinned DESC, created_at DESC"
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+def update_chat_session(session_id: str, title: str = None,
+                        is_pinned: bool = None, is_archived: bool = None) -> dict | None:
+    """Patch one or more fields on a chat session."""
+    with get_conn() as conn:
+        updates = ["updated_at=?"]
+        vals = [datetime.utcnow().isoformat()]
+        if title is not None:
+            updates.append("title=?")
+            vals.append(title)
+        if is_pinned is not None:
+            updates.append("is_pinned=?")
+            vals.append(int(is_pinned))
+        if is_archived is not None:
+            updates.append("is_archived=?")
+            vals.append(int(is_archived))
+        vals.append(session_id)
+        conn.execute(
+            f"UPDATE chat_sessions SET {', '.join(updates)} WHERE id=?", vals
+        )
+        conn.commit()
+        r = conn.execute("SELECT * FROM chat_sessions WHERE id=?", (session_id,)).fetchone()
+        return dict(r) if r else None
+
+def delete_chat_session(session_id: str):
+    """Delete a session header and securely cascade delete its Agno records internally."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
+        # Delete internal Agno session buffer mapping
+        try:
+            conn.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
+        except Exception:
+            pass
+        conn.commit()
 
 
 # ─── Profile helpers ────────────────────────────────────────────────────────────

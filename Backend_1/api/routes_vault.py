@@ -8,6 +8,7 @@ import shutil
 import threading
 import uuid
 import mimetypes
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Query, Depends, BackgroundTasks
@@ -105,10 +106,10 @@ async def summarize_folder(folder_id: str, team: Team = Depends(get_medical_team
     if not files:
         summary = "This folder is empty."
     else:
-        file_list_str = "\n".join(f"- {f['original_name']} ({f.get('file_type', 'unknown')})" for f in files)
-        prompt = f"Please provide a concise medical summary (2-3 sentences) of the patient portfolio given these file contents/types within this folder:\n{file_list_str}"
+        file_list_str = "\n".join(f"- {f['original_name']}: {f.get('ai_summary') or 'No summary yet'}" for f in files)
+        prompt = f"Please provide a concise medical patient overview (2-3 sentences) based on the summaries of the documents in this folder:\n{file_list_str}"
         try:
-            result = team.run(prompt)
+            result = await asyncio.to_thread(team.run, prompt)
             summary = result.content
             if isinstance(summary, list):
                 summary = "\n".join(str(block.text if hasattr(block, "text") else block) for block in summary)
@@ -141,8 +142,24 @@ async def preview_file(file_id: str):
     path = os.path.join(UPLOAD_DIR, f["safe_name"])
     if not os.path.exists(path):
         raise HTTPException(404, "File not found on disk")
-    media_type = f.get("mime_type") or "application/octet-stream"
-    return FileResponse(path, media_type=media_type, filename=f["original_name"])
+    media_type = f.get("mime_type")
+    
+    # Fallback MIME type guessing if the DB has octet-stream
+    if not media_type or media_type == "application/octet-stream":
+        name_lower = f["original_name"].lower()
+        if name_lower.endswith(".pdf"):
+            media_type = "application/pdf"
+        elif name_lower.endswith((".png", ".jpg", ".jpeg")):
+            media_type = "image/jpeg"
+        else:
+            media_type = "application/octet-stream"
+
+    return FileResponse(
+        path, 
+        media_type=media_type, 
+        filename=f["original_name"], 
+        content_disposition_type="inline"
+    )
 
 @router.patch("/files/{file_id}/move", response_model=FileOut)
 async def move_file(file_id: str, body: FileMoveRequest):
@@ -181,14 +198,41 @@ async def _run_summarization_logic(file_id: str, team: Team):
             disk_path = os.path.join(UPLOAD_DIR, f["safe_name"])
             if os.path.exists(disk_path):
                 images_to_process.append(prepare_image(disk_path))
-            prompt = "Please provide a concise medical interpretation of this image in 2-4 sentences."
+            prompt = (
+                "Please perform a comprehensive medical analysis of this image. "
+                "Extract all observable details and present them using rich Markdown formatting to look stylish. "
+                "Use headers (##), bold text (**), and lists (-) where appropriate. "
+                "Ensure you include: \n"
+                "- Title / Image Type\n"
+                "- Detected Patient Info & Dates\n"
+                "- Key Findings\n"
+                "- Detailed Clinical Summary"
+            )
         else:
-            prompt = f"Please provide a concise medical summary of the document named '{f['original_name']}'. Summarize key points in 2-4 sentences."
+            text_context = ""
+            disk_path = os.path.join(UPLOAD_DIR, f["safe_name"])
+            if f["file_type"] in ("pdf", "document") and os.path.exists(disk_path):
+                from agno.knowledge.reader.pdf_reader import PDFReader
+                try:
+                    docs = PDFReader().read(pdf=disk_path)
+                    text_context = "\n".join([d.content for d in docs if d.content])
+                    text_context = text_context[:15000] # truncate to avoid token limits
+                except Exception as e:
+                    logger.error(f"Failed to read PDF text for {file_id}: {e}")
+                    
+            prompt = (
+                f"Please extract all significant medical details from the document named '{f['original_name']}'. "
+                f"Do not just write a short summary. Extract everything relevant and format your response using rich Markdown to make it stylish. "
+                f"Use headers (##), bold text (**), and bullet points (-) to organize the information clearly. "
+                f"Please organize fields such as Patient Info, Dates, Diagnoses, Key Findings, and a Clinical Summary."
+            )
+            if text_context:
+                prompt += f"\n\nDocument text:\n{text_context}"
             
         if images_to_process:
-            result = team.run(prompt, images=images_to_process)
+            result = await asyncio.to_thread(team.run, prompt, images=images_to_process)
         else:
-            result = team.run(prompt)
+            result = await asyncio.to_thread(team.run, prompt)
             
         summary = result.content
         if not summary:
@@ -241,9 +285,12 @@ async def upload_document(
     if file_type == "pdf":
         import asyncio
         import logging
-        try:
+        def _parse_pdf_sync():
             with _pdf_lock:
-                await asyncio.to_thread(load_documents_to_db, disk_path, file.filename)
+                load_documents_to_db(disk_path, file.filename)
+
+        try:
+            await asyncio.to_thread(_parse_pdf_sync)
         except Exception as e:
             logging.getLogger(__name__).exception("PDF vectorization failed:")
 

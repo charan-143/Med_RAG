@@ -1,10 +1,9 @@
-from agents.routing_agent import medical_team_agent
+from agents.routing_agent import create_medical_team_agent
 from agno.team import Team
 
 def get_medical_team_router() -> Team:
     """
     Dependency Injection provider.
-    Supplies the centralized Supervisor routing Team to endpoints cleanly,
-    eliminating global variable leaks and facilitating clean unit testing.
+    Defaults to a stateless/generic session pool for background workers (like Vault AI Summaries).
     """
-    return medical_team_agent
+    return create_medical_team_agent(session_id="stateless_api_worker")
