@@ -134,14 +134,61 @@ class ApiService {
   }
 
   // ─── Chat ─────────────────────────────────────────────────────────────────
-  static Future<List<dynamic>> getChatHistory({int limit = 50}) async {
-    final res = await http.get(Uri.parse('$_base/chat/history?limit=$limit'));
+  static Future<List<dynamic>> getChatSessions() async {
+    final res = await http.get(Uri.parse('$_base/chat/sessions'));
+    _check(res);
+    return _deepCastList(jsonDecode(res.body));
+  }
+
+  static Future<Map<String, dynamic>> createChatSession(String title) async {
+    final uri = Uri.parse('$_base/chat/sessions');
+    final req = http.MultipartRequest('POST', uri);
+    req.fields['title'] = title;
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+    _check(res);
+    return _deepCastMap(jsonDecode(res.body));
+  }
+
+  static Future<void> deleteChatSession(String sessionId) async {
+    final res = await http.delete(Uri.parse('$_base/chat/sessions/$sessionId'));
+    _check(res);
+  }
+
+  static Future<Map<String, dynamic>> updateChatSession(
+    String sessionId, {
+    String? title,
+    bool? isPinned,
+    bool? isArchived,
+  }) async {
+    final body = <String, dynamic>{};
+    if (title != null) body['title'] = title;
+    if (isPinned != null) body['is_pinned'] = isPinned;
+    if (isArchived != null) body['is_archived'] = isArchived;
+    final res = await http.patch(
+      Uri.parse('$_base/chat/sessions/$sessionId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _check(res);
+    return _deepCastMap(jsonDecode(res.body));
+  }
+
+  static Future<String> exportChatSession(String sessionId) async {
+    final res = await http.get(Uri.parse('$_base/chat/sessions/$sessionId/export'));
+    _check(res);
+    return res.body;
+  }
+
+  static Future<List<dynamic>> getChatHistory(String sessionId, {int limit = 50}) async {
+    final res = await http.get(Uri.parse('$_base/chat/history?session_id=$sessionId&limit=$limit'));
     _check(res);
     return _deepCastList(jsonDecode(res.body));
   }
 
   static Future<Map<String, dynamic>> sendChat(
-    String message, {
+    String message,
+    String sessionId, {
     List<String> fileIds = const [],
     List<String> folderIds = const [],
     Uint8List? imageBytes,
@@ -150,6 +197,7 @@ class ApiService {
     final uri = Uri.parse('$_base/chat');
     final req = http.MultipartRequest('POST', uri);
     req.fields['message'] = message;
+    req.fields['session_id'] = sessionId;
     if (fileIds.isNotEmpty) req.fields['file_ids'] = fileIds.join(',');
     if (folderIds.isNotEmpty) req.fields['folder_ids'] = folderIds.join(',');
     if (imageBytes != null && imageFilename != null) {

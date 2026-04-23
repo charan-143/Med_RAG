@@ -311,15 +311,7 @@ class _DistributionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = byType.isEmpty
-        ? {
-            'pdf':    1.0,
-            'image':  0.7,
-            'dicom':  0.5,
-            'report': 0.3,
-            'other':  0.2,
-          }
-        : Map<String, dynamic>.from(byType);
+    final data = Map<String, dynamic>.from(byType);
 
     final total = data.values.fold<num>(0, (a, b) => a + (b as num));
 
@@ -336,7 +328,12 @@ class _DistributionCard extends StatelessWidget {
           // Fixed height bar chart — use LayoutBuilder so bars scale correctly
           SizedBox(
             height: 160,
-            child: Row(
+            child: data.isEmpty
+                ? Center(
+                    child: Text('No distribution data available',
+                        style: AppTextStyles.body(13, FontWeight.w400,
+                            AppColors.onSurfaceVariant)))
+                : Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: data.entries.toList().asMap().entries.map((e) {
                 final pct =

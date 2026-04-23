@@ -21,7 +21,9 @@ def load_documents_to_db(file_path: str, original_name: str):
         # Knowledge.insert doesn't accept a list of Documents in this version.
         # We manually use the vector_db to insert our filtered/tagged chunks.
         import hashlib
-        content_hash = hashlib.md5(file_path.encode()).hexdigest()
+        with open(file_path, "rb") as f:
+            pdf_bytes = f.read()
+        content_hash = hashlib.md5(pdf_bytes).hexdigest()
         pdf_knowledge_base.vector_db.insert(content_hash=content_hash, documents=valid_documents)
     else:
         import logging

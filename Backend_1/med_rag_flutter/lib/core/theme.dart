@@ -97,16 +97,9 @@ class AppTheme {
   static ThemeData get light => ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: AppColors.surface,
-    colorScheme: const ColorScheme(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: AppColors.primary,
       brightness: Brightness.light,
-      primary: AppColors.primary,
-      onPrimary: AppColors.onPrimary,
-      secondary: AppColors.tertiary,
-      onSecondary: AppColors.onPrimary,
-      error: AppColors.error,
-      onError: AppColors.onPrimary,
-      surface: AppColors.surface,
-      onSurface: AppColors.onSurface,
     ),
     textTheme: GoogleFonts.interTextTheme(),
     cardTheme: CardThemeData(

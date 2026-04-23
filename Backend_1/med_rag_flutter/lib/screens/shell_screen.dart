@@ -16,13 +16,6 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _selected = 0;
 
-  static const _navItems = [
-    _NavItem(Icons.dashboard_outlined,    Icons.dashboard,         'Overview'),
-    _NavItem(Icons.folder_outlined,        Icons.folder_open,       'Vault'),
-    _NavItem(Icons.forum_outlined,         Icons.forum,             'Chat'),
-    _NavItem(Icons.edit_note_outlined,     Icons.edit_note,         'Notebook'),
-  ];
-
   final _screens = const [
     OverviewScreen(),
     VaultScreen(),
@@ -36,10 +29,65 @@ class _ShellScreenState extends State<ShellScreen> {
       backgroundColor: AppColors.surface,
       body: Row(
         children: [
-          _Sidebar(
-            selected: _selected,
-            navItems: _navItems,
-            onTap: (i) => setState(() => _selected = i),
+          Container(
+            width: 88, // Narrow rail width
+            color: AppColors.surfaceContainer,
+            child: Column(
+              children: [
+                Expanded(
+                  child: NavigationRail(
+                    extended: false,
+                    labelType: NavigationRailLabelType.none,
+                    backgroundColor: AppColors.surfaceContainer,
+                    selectedIndex: _selected,
+                    onDestinationSelected: (i) => setState(() => _selected = i),
+                    // Logo Header
+                    leading: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [AppColors.primary, AppColors.primaryContainer],
+                            begin: Alignment.topLeft, end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                        ),
+                        child: const Icon(Icons.health_and_safety_outlined, color: Colors.white, size: 22),
+                      ),
+                    ),
+                    // Navigation Links
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.dashboard_outlined),
+                        selectedIcon: Icon(Icons.dashboard),
+                        label: Text('Overview'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.folder_outlined),
+                        selectedIcon: Icon(Icons.folder_open),
+                        label: Text('Vault'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.forum_outlined),
+                        selectedIcon: Icon(Icons.forum),
+                        label: Text('Chat'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.edit_note_outlined),
+                        selectedIcon: Icon(Icons.edit_note),
+                        label: Text('Notebook'),
+                      ),
+                    ],
+                  ),
+                ),
+                // Profile Bottom Button (Anchored manually safely at bottom of parent column)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24.0),
+                  child: const _AvatarButton(),
+                ),
+              ],
+            ),
           ),
           Expanded(child: _screens[_selected]),
         ],
@@ -48,164 +96,16 @@ class _ShellScreenState extends State<ShellScreen> {
   }
 }
 
-// ─── Sidebar ───────────────────────────────────────────────────────────────────
-class _NavItem {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  const _NavItem(this.icon, this.activeIcon, this.label);
-}
-
-class _Sidebar extends StatefulWidget {
-  final int selected;
-  final List<_NavItem> navItems;
-  final ValueChanged<int> onTap;
-  const _Sidebar({required this.selected, required this.navItems, required this.onTap});
+// ─── Avatar Profile Button ───────────────────────────────────────────────────
+class _AvatarButton extends StatefulWidget {
+  const _AvatarButton();
 
   @override
-  State<_Sidebar> createState() => _SidebarState();
+  State<_AvatarButton> createState() => _AvatarButtonState();
 }
 
-class _SidebarState extends State<_Sidebar> {
+class _AvatarButtonState extends State<_AvatarButton> {
   OverlayEntry? _avatarMenu;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 240,
-      color: AppColors.surfaceContainer,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Logo ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 32, 20, 28),
-            child: Row(
-              children: [
-                Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primary, AppColors.primaryContainer],
-                      begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                  child: const Icon(Icons.health_and_safety_outlined, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Clinical Atelier',
-                        style: AppTextStyles.headline(15, FontWeight.w700, AppColors.primaryContainer)),
-                    Text('PRECISION HEALTH',
-                        style: AppTextStyles.label(9, AppColors.onSurfaceVariant)
-                            .copyWith(letterSpacing: 1.4, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ── Nav Items ──
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Column(
-                children: List.generate(widget.navItems.length, (i) {
-                  final active = widget.selected == i;
-                  final item = widget.navItems[i];
-                  return _NavButton(
-                    icon: active ? item.activeIcon : item.icon,
-                    label: item.label,
-                    active: active,
-                    onTap: () => widget.onTap(i),
-                  );
-                }),
-              ),
-            ),
-          ),
-
-          // ── New Record Button ──
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryContainer],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.25),
-                      blurRadius: 12, offset: const Offset(0, 4),
-                    )
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                    ),
-                  ),
-                  onPressed: () => _showUploadDialog(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text('New Record', style: AppTextStyles.body(13, FontWeight.w600, Colors.white)),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Avatar / Profile / Settings ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 28),
-            child: Builder(builder: (ctx) => GestureDetector(
-              onTap: () => _showAvatarMenu(ctx),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppColors.primaryFixed,
-                      child: Text('JT',
-                          style: AppTextStyles.body(12, FontWeight.w700, AppColors.primary)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Julian Thorne',
-                              style: AppTextStyles.body(12, FontWeight.w600),
-                              overflow: TextOverflow.ellipsis),
-                          Text('Patient',
-                              style: AppTextStyles.label(10, AppColors.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.expand_less, size: 16, color: AppColors.onSurfaceVariant),
-                  ],
-                ),
-              ),
-            )),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showAvatarMenu(BuildContext ctx) {
     final box = ctx.findRenderObject() as RenderBox;
@@ -214,7 +114,6 @@ class _SidebarState extends State<_Sidebar> {
     _avatarMenu?.remove();
     _avatarMenu = OverlayEntry(builder: (_) => Stack(
       children: [
-        // Dismiss overlay
         Positioned.fill(child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () { _avatarMenu?.remove(); _avatarMenu = null; },
@@ -259,63 +158,28 @@ class _SidebarState extends State<_Sidebar> {
     Overlay.of(ctx).insert(_avatarMenu!);
   }
 
-  void _showUploadDialog(BuildContext context) {
-    showDialog(context: context, builder: (_) => const _UploadQuickDialog());
-  }
-}
-
-class _NavButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _NavButton({required this.icon, required this.label, required this.active, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          onTap: onTap,
-          child: Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: active ? AppColors.surfaceContainerLowest.withOpacity(0.7) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                ),
-                child: Row(
-                  children: [
-                    Icon(icon,
-                        size: 20,
-                        color: active ? AppColors.primaryContainer : AppColors.onSurfaceVariant),
-                    const SizedBox(width: 12),
-                    Text(label,
-                        style: AppTextStyles.body(
-                          13, FontWeight.w600,
-                          active ? AppColors.primaryContainer : AppColors.onSurfaceVariant,
-                        )),
-                  ],
-                ),
-              ),
-              // Active pill
-              if (active)
-                Positioned(
-                  left: 0, top: 8, bottom: 8,
-                  child: Container(
-                    width: 3,
-                    decoration: BoxDecoration(
-                      color: AppColors.tertiaryFixed,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+    return GestureDetector(
+      onTap: () => _showAvatarMenu(context),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: CircleAvatar(
+          radius: 20,
+          backgroundColor: AppColors.primaryFixed,
+          child: Text('JT',
+              style: AppTextStyles.body(12, FontWeight.w700, AppColors.primary)),
         ),
       ),
     );
@@ -337,19 +201,3 @@ class _MenuTile extends StatelessWidget {
   );
 }
 
-// Quick-launch upload dialog (minimal; full version in vault/upload_dialog.dart)
-class _UploadQuickDialog extends StatelessWidget {
-  const _UploadQuickDialog();
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    backgroundColor: AppColors.surfaceContainerLowest,
-    shape: AppRadius.asymmetric,
-    title: Text('New Record', style: AppTextStyles.headline(18, FontWeight.w700)),
-    content: Text('Open the Vault screen to upload a new medical record.',
-        style: AppTextStyles.body(14, FontWeight.w400, AppColors.onSurfaceVariant)),
-    actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-      ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Go to Vault')),
-    ],
-  );
-}

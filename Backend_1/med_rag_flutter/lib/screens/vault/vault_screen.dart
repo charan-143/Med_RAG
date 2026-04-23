@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'dart:html' as html;
+import 'dart:ui_web' as ui_web;
 import '../../core/theme.dart';
 import '../../core/api_service.dart';
+import 'file_viewer_screen.dart';
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 class VaultScreen extends StatefulWidget {
@@ -93,10 +98,26 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   Future<void> _deleteSelected() async {
-    final toDelete = _selectedIds
+    final toDeleteFiles = _selectedIds
         .where((id) => _files.any((f) => f['id'] == id))
         .toList();
-    for (final id in toDelete) await ApiService.deleteFile(id);
+    final toDeleteFolders = _selectedIds
+        .where((id) => _folders.any((f) => f['id'] == id))
+        .toList();
+
+    for (final id in toDeleteFiles) await ApiService.deleteFile(id);
+    for (final id in toDeleteFolders) {
+      await ApiService.deleteFolder(id);
+      if (_selectedFolderId == id) {
+        if (mounted) {
+          setState(() {
+            _selectedFolderId = null;
+            _selectedFolderName = null;
+          });
+        }
+      }
+    }
+
     setState(() => _selectedIds.clear());
     _load();
   }
@@ -148,13 +169,14 @@ class _VaultScreenState extends State<VaultScreen> {
     setState(() => _loading = true);
     try {
       final updated = await ApiService.summarizeFolder(folderId);
+      if (!mounted) return;
       setState(() {
         _previewItem = updated;
         _previewIsFolder = true;
       });
       _load();
     } catch (_) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -162,14 +184,24 @@ class _VaultScreenState extends State<VaultScreen> {
     setState(() => _loading = true);
     try {
       final updated = await ApiService.summarizeFile(fileId);
+      if (!mounted) return;
       setState(() {
         _previewItem = updated;
         _previewIsFolder = false;
       });
       _load();
     } catch (_) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _openFile(Map<String, dynamic> file) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FileViewerScreen(file: file),
+      ),
+    );
   }
 
   Future<void> _newFolder() async {
@@ -323,6 +355,7 @@ class _VaultScreenState extends State<VaultScreen> {
                                           _previewIsFolder = false;
                                         }),
                                         onSummarize: () => _summarizeFile(f['id'] as String? ?? ''),
+                                        onPreview: () => _openFile(Map<String, dynamic>.from(f as Map)),
                                       );
                                     },
                                   ),
@@ -376,7 +409,7 @@ class _SelectionBar extends StatelessWidget {
             style: AppTextStyles.body(15, FontWeight.w600)),
         const SizedBox(width: 20),
         OutlinedButton.icon(
-          onPressed: () {},
+          onPressed: null,
           icon: const Icon(Icons.auto_awesome_outlined, size: 15),
           label: const Text('Summarize this folder'),
           style: OutlinedButton.styleFrom(
@@ -409,7 +442,7 @@ class _SelBtn extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
     icon: Icon(icon, size: 20, color: AppColors.onSurface),
     tooltip: tooltip,
-    onPressed: onTap ?? () {},
+    onPressed: onTap,
     padding: const EdgeInsets.all(8),
     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
   );
@@ -663,6 +696,7 @@ class _DriveFileCard extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback? onInfo;
   final VoidCallback? onSummarize;
+  final VoidCallback? onPreview;
   const _DriveFileCard({
     required this.file,
     required this.isSelected,
@@ -672,6 +706,7 @@ class _DriveFileCard extends StatefulWidget {
     required this.onDelete,
     this.onInfo,
     this.onSummarize,
+    this.onPreview,
   });
 
   @override
@@ -693,6 +728,7 @@ class _DriveFileCardState extends State<_DriveFileCard> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
+        onDoubleTap: widget.onPreview,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           decoration: BoxDecoration(
@@ -727,6 +763,7 @@ class _DriveFileCardState extends State<_DriveFileCard> {
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                       child: SizedBox.expand(
                         child: _DocumentThumbnail(
+                          fileId: f['id'] as String?,
                           fileType: fileType,
                           fileName: name,
                         ),
@@ -775,6 +812,7 @@ class _DriveFileCardState extends State<_DriveFileCard> {
                           onDelete: widget.onDelete,
                           onInfo: widget.onInfo,
                           onSummarize: widget.onSummarize,
+                          onOpen: widget.onPreview,
                           buttonBuilder: (onTap) => GestureDetector(
                             onTap: onTap,
                             child: Container(
@@ -836,23 +874,99 @@ class _DriveFileCardState extends State<_DriveFileCard> {
 }
 
 // ─── Document Thumbnail ────────────────────────────────────────────────────────
-class _DocumentThumbnail extends StatelessWidget {
+class _DocumentThumbnail extends StatefulWidget {
+  final String? fileId;
   final String fileType;
   final String fileName;
-  const _DocumentThumbnail({required this.fileType, required this.fileName});
+  const _DocumentThumbnail({this.fileId, required this.fileType, required this.fileName});
+
+  @override
+  State<_DocumentThumbnail> createState() => _DocumentThumbnailState();
+}
+
+class _DocumentThumbnailState extends State<_DocumentThumbnail> {
+  String? _viewId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.fileType != 'image' && widget.fileId != null) {
+      _viewId = 'thumb-pdf-${widget.fileId}-${DateTime.now().microsecondsSinceEpoch}';
+      final url = ApiService.getFilePreviewUrl(widget.fileId!) + '#view=Fit&toolbar=0&navpanes=0&scrollbar=0';
+      
+      ui_web.platformViewRegistry.registerViewFactory(
+        _viewId!,
+        (int viewId) => html.IFrameElement()
+          ..src = url
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.pointerEvents = 'none'
+          ..style.overflow = 'hidden'
+          ..setAttribute('scrolling', 'no'),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (fileType == 'image') {
+    if (widget.fileType == 'image' && widget.fileId != null) {
+      return Image.network(
+        ApiService.getFilePreviewUrl(widget.fileId!),
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, _, __) => Container(
+          color: const Color(0xFFF3F4F6),
+          child: const Center(
+            child: Icon(Icons.broken_image_outlined, size: 40, color: Color(0xFF9CA3AF)),
+          ),
+        ),
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: const Color(0xFFF3F4F6),
+            child: Center(
+              child: SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: progress.expectedTotalBytes != null
+                      ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    if (_viewId != null) {
       return Container(
-        color: const Color(0xFFF3F4F6),
-        child: const Center(
-          child: Icon(Icons.image_outlined, size: 52, color: Color(0xFF9CA3AF)),
+        width: double.infinity,
+        height: double.infinity,
+        clipBehavior: Clip.hardEdge,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+        ),
+        child: IgnorePointer(
+          child: LayoutBuilder(
+            builder: (ctx, constraints) => OverflowBox(
+              // Add ~24 pixels to right to push the scrollbar completely off-screen
+              maxWidth: constraints.maxWidth + 24,
+              maxHeight: constraints.maxHeight + 2, // Slight height tweak to hide 1px native borders
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: constraints.maxWidth + 24,
+                height: constraints.maxHeight + 2,
+                child: HtmlElementView(viewType: _viewId!),
+              ),
+            ),
+          ),
         ),
       );
     }
 
-    // PDF / document preview
+    // PDF / document preview fallback
     return Container(
       color: Colors.white,
       child: Column(
@@ -963,6 +1077,7 @@ class _DriveContextMenu extends StatelessWidget {
   final VoidCallback? onRename;
   final VoidCallback? onInfo;
   final VoidCallback? onSummarize;
+  final VoidCallback? onOpen;
   final _MenuButtonBuilder buttonBuilder;
 
   const _DriveContextMenu({
@@ -972,6 +1087,7 @@ class _DriveContextMenu extends StatelessWidget {
     this.onRename,
     this.onInfo,
     this.onSummarize,
+    this.onOpen,
     required this.buttonBuilder,
   });
 
@@ -1003,6 +1119,7 @@ class _DriveContextMenu extends StatelessWidget {
       ),
       color: Colors.white,
       items: [
+        if (!isFolder) _item('open', Icons.open_in_new_outlined, 'Open'),
         _item('download', Icons.download_outlined, 'Download'),
         _item('rename', Icons.edit_outlined, 'Rename', shortcut: 'Ctrl+Alt+E'),
         _item('summarize', Icons.auto_awesome_outlined,
@@ -1026,6 +1143,8 @@ class _DriveContextMenu extends StatelessWidget {
       onInfo!();
     } else if (result == 'summarize' && onSummarize != null) {
       onSummarize!();
+    } else if ((result == 'open' || result == 'download') && onOpen != null) {
+      onOpen!();
     }
   }
 
@@ -1202,9 +1321,28 @@ class _DetailsPanel extends StatelessWidget {
                     child: Center(
                       child: isFolder
                           ? const Icon(Icons.folder, size: 64, color: AppColors.primary)
-                          : _DocumentThumbnail(
-                              fileType: item['file_type'] ?? 'pdf',
-                              fileName: name.toString(),
+                          : Stack(
+                              children: [
+                                _DocumentThumbnail(
+                                  fileId: item['id'] as String?,
+                                  fileType: item['file_type'] ?? 'pdf',
+                                  fileName: name.toString(),
+                                ),
+                                if (!isFolder)
+                                  Positioned(
+                                    bottom: 8, right: 8,
+                                    child: FloatingActionButton.small(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => FileViewerScreen(file: item)),
+                                        );
+                                      },
+                                      backgroundColor: Colors.white.withOpacity(0.9),
+                                      child: const Icon(Icons.open_in_new, size: 18, color: AppColors.primary),
+                                    ),
+                                  ),
+                              ],
                             ),
                     ),
                   ),
@@ -1213,7 +1351,7 @@ class _DetailsPanel extends StatelessWidget {
                   const SizedBox(height: 24),
                   
                   // AI OVERVIEW
-                  if (!isFolder && aiSummary != null && aiSummary.isNotEmpty) ...[
+                  if (aiSummary != null && aiSummary.isNotEmpty) ...[
                     Row(
                       children: [
                         const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
@@ -1223,12 +1361,23 @@ class _DetailsPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.4)),
                       ),
-                      child: Text(aiSummary, style: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurface.withOpacity(0.8))),
+                      child: MarkdownBody(
+                        data: aiSummary,
+                        styleSheet: MarkdownStyleSheet(
+                          p: AppTextStyles.body(13, FontWeight.w400, AppColors.onSurface.withOpacity(0.85)),
+                          h1: AppTextStyles.headline(18, FontWeight.w700, AppColors.primary),
+                          h2: AppTextStyles.headline(15, FontWeight.w600, AppColors.onSurface),
+                          h3: AppTextStyles.headline(14, FontWeight.w600, AppColors.onSurfaceVariant),
+                          listBullet: AppTextStyles.body(14, FontWeight.w700, AppColors.primary),
+                          strong: AppTextStyles.body(13, FontWeight.w700, AppColors.onSurface),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 24),
                   ],
